@@ -137,13 +137,27 @@ class PaperPortfolio:
         return record
 
     def get_stats(self) -> Dict[str, Any]:
-        poly_pnl = self.polymarket_balance - self.initial_poly
-        crypto_pnl = self.crypto_balance - self.initial_crypto
-        total_pnl = poly_pnl + crypto_pnl
+        poly_invested = sum(pos.get("cost", 0) for pos in self.poly_positions.values())
+        crypto_invested = sum(pos.get("amount", 0) for pos in self.crypto_positions.values())
+
+        poly_equity = self.polymarket_balance + poly_invested
+        crypto_equity = self.crypto_balance + crypto_invested
+        total_equity = poly_equity + crypto_equity
+
+        poly_pnl = poly_equity - self.initial_poly
+        crypto_pnl = crypto_equity - self.initial_crypto
+        total_pnl = total_equity - (self.initial_poly + self.initial_crypto)
+
         return {
-            "poly_balance": round(self.polymarket_balance, 2),
-            "crypto_balance": round(self.crypto_balance, 2),
-            "total_balance": round(self.polymarket_balance + self.crypto_balance, 2),
+            "poly_cash": round(self.polymarket_balance, 2),
+            "poly_invested": round(poly_invested, 2),
+            "poly_equity": round(poly_equity, 2),
+            "crypto_cash": round(self.crypto_balance, 2),
+            "crypto_invested": round(crypto_invested, 2),
+            "crypto_equity": round(crypto_equity, 2),
+            "total_cash": round(self.polymarket_balance + self.crypto_balance, 2),
+            "total_invested": round(poly_invested + crypto_invested, 2),
+            "total_equity": round(total_equity, 2),
             "poly_open": len(self.poly_positions),
             "crypto_open": len(self.crypto_positions),
             "poly_pnl": round(poly_pnl, 2),

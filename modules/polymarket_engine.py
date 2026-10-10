@@ -128,6 +128,10 @@ class PolymarketEngine:
                 if opp_key in self.seen_opportunities:
                     continue
 
+                # Limit active positions so bot keeps cash reserve
+                if len(self.portfolio.poly_positions) >= 6:
+                    return
+
                 bet = opp["bet_amount"]
                 if bet < 1.0 or self.portfolio.polymarket_balance < bet:
                     continue
