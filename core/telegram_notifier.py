@@ -2,6 +2,7 @@ import aiohttp
 import asyncio
 import logging
 import os
+import html
 from config import config
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,6 @@ class TelegramNotifier:
                                 self.chat_id = str(cid)
                                 config.TELEGRAM_CHAT_ID = self.chat_id
                                 logger.info(f"Automatically discovered Telegram Chat ID: {self.chat_id}")
-                                # Persist to .env if possible
                                 self._persist_chat_id(self.chat_id)
                                 return True
         except Exception as e:
@@ -56,7 +56,7 @@ class TelegramNotifier:
             except Exception:
                 pass
 
-    async def send_message(self, text: str, parse_mode: str = "Markdown") -> bool:
+    async def send_message(self, text: str, parse_mode: str = "HTML") -> bool:
         if not self.token:
             print(f"\n[TG ALERT MOCK]:\n{text}\n")
             return False
@@ -64,9 +64,10 @@ class TelegramNotifier:
         if not self.chat_id:
             found = await self.auto_discover_chat_id()
             if not found:
-                print(f"\n[TG WAITING FOR /start in @bu7634bot]:\n{text}\n")
+                print(f"\n[TG WAITING FOR /start]:\n{text}\n")
                 return False
 
+        url = f"https://api.telegram.org/bot{self.token}/sendMessage"
         payload = {
             "chat_id": self.chat_id,
             "text": text,
@@ -74,16 +75,23 @@ class TelegramNotifier:
             "disable_web_page_preview": True
         }
 
-        url = f"https://api.telegram.org/bot{self.token}/sendMessage"
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=5)) as resp:
                     if resp.status == 200:
                         return True
                     else:
+                        # Fallback without parse_mode if formatting had an error
                         err = await resp.text()
-                        logger.warning(f"Telegram API error: {err}")
-                        return False
+                        logger.warning(f"Telegram formatting error ({err}), falling back to plain text...")
+                        clean_text = text.replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", "").replace("<code>", "").replace("</code>", "")
+                        payload_plain = {
+                            "chat_id": self.chat_id,
+                            "text": clean_text,
+                            "disable_web_page_preview": True
+                        }
+                        async with session.post(url, json=payload_plain) as resp2:
+                            return resp2.status == 200
         except Exception as e:
             logger.warning(f"Failed to send Telegram message: {e}")
             return False

@@ -2,6 +2,7 @@ import aiohttp
 import asyncio
 import json
 import logging
+import html
 from typing import List, Dict, Any, Optional
 from config import config
 from core.paper_portfolio import PaperPortfolio
@@ -148,16 +149,19 @@ class PolymarketEngine:
 
                 if trade_id:
                     link = f"https://polymarket.com/event/{opp.get('slug', '')}"
+                    safe_title = html.escape(market_title)
+                    safe_reason = html.escape(opp['reason'])
+                    safe_strat = html.escape(opp['strategy'])
                     alert = (
-                        f"🎯 *[POLYMARKET DEMO TRADE]*\n"
-                        f"📊 *Стратегия:* `{opp['strategy']}`\n"
-                        f"📌 *Рынок:* _{market_title}_\n"
-                        f"💡 *Сигнал:* {opp['reason']}\n"
-                        f"💵 *Сумма:* `${bet:.2f}` (Долей: `{shares}` по `${price:.3f}`)\n"
-                        f"💰 *Остаток Poly-баланса:* `${self.portfolio.polymarket_balance:.2f}`\n"
-                        f"🔗 [Открыть на Polymarket]({link})"
+                        f"🎯 <b>[POLYMARKET DEMO TRADE]</b>\n"
+                        f"📊 <b>Стратегия:</b> <code>{safe_strat}</code>\n"
+                        f"📌 <b>Рынок:</b> <i>{safe_title}</i>\n"
+                        f"💡 <b>Сигнал:</b> {safe_reason}\n"
+                        f"💵 <b>Сумма:</b> <code>${bet:.2f}</code> (Долей: <code>{shares}</code> по <code>${price:.3f}</code>)\n"
+                        f"💰 <b>Остаток Poly-баланса:</b> <code>${self.portfolio.polymarket_balance:.2f}</code>\n"
+                        f"🔗 <a href='{link}'>Открыть на Polymarket</a>"
                     )
-                    await notifier.send_message(alert)
+                    await notifier.send_message(alert, parse_mode="HTML")
                     logger.info(f"[Polymarket] Executed paper trade {trade_id}: {market_title}")
                     # Restrict to 1 trade per scan cycle to prevent spamming
                     return

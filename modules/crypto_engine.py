@@ -1,6 +1,7 @@
 import aiohttp
 import asyncio
 import logging
+import html
 from typing import List, Dict, Any, Optional
 from config import config
 from core.paper_portfolio import PaperPortfolio
@@ -93,14 +94,14 @@ class CryptoEngine:
                 pnl = closed["pnl"]
                 emoji = "🟢" if pnl >= 0 else "🔴"
                 msg = (
-                    f"{emoji} *[CRYPTO TRADE CLOSED]*\n"
-                    f"🪙 *Пара:* `{closed['symbol']}` ({closed['side']})\n"
-                    f"🚪 *Причина:* `{reason}`\n"
-                    f"🎯 *Вход:* `${closed['entry']:.2f}` ➔ *Выход:* `${closed['exit']:.2f}`\n"
-                    f"💵 *PnL:* `+{pnl:.2f}$` ({closed['pnl_pct']:+.2f}%)\n"
-                    f"💰 *Новый баланс Crypto:* `${self.portfolio.crypto_balance:.2f}`"
+                    f"{emoji} <b>[CRYPTO TRADE CLOSED]</b>\n"
+                    f"🪙 <b>Пара:</b> <code>{closed['symbol']}</code> ({closed['side']})\n"
+                    f"🚪 <b>Причина:</b> <code>{reason}</code>\n"
+                    f"🎯 <b>Вход:</b> <code>${closed['entry']:.2f}</code> ➔ <b>Выход:</b> <code>${closed['exit']:.2f}</code>\n"
+                    f"💵 <b>PnL:</b> <code>{pnl:+.2f}$</code> ({closed['pnl_pct']:+.2f}%)\n"
+                    f"💰 <b>Новый баланс Crypto:</b> <code>${self.portfolio.crypto_balance:.2f}</code>"
                 )
-                await notifier.send_message(msg)
+                await notifier.send_message(msg, parse_mode="HTML")
                 logger.info(f"[Crypto] Closed {trade_id}: PnL = {pnl:.2f}")
 
     async def scan_and_trade(self):
@@ -159,13 +160,13 @@ class CryptoEngine:
                 if trade_id:
                     side_emoji = "🚀 ЛОНГ" if signal == "BUY" else "🔻 ШОРТ"
                     alert = (
-                        f"⚡ *[CRYPTO DEMO TRADE]*\n"
-                        f"🪙 *Пара:* `{symbol}` ({side_emoji})\n"
-                        f"📈 *Стратегия:* `Donchian Breakout + Trend`\n"
-                        f"💵 *Цена входа:* `${current_price:.2f}`\n"
-                        f"🛡 *Стоп-лосс (риск):* `${stop_loss:.2f}` (-1.5%)\n"
-                        f"🎯 *Тейк-профит (цель):* `${take_profit:.2f}` (+3.5%)\n"
-                        f"💰 *Размер позиции:* `${trade_size:.2f}` | Баланс: `${self.portfolio.crypto_balance:.2f}`"
+                        f"⚡ <b>[CRYPTO DEMO TRADE]</b>\n"
+                        f"🪙 <b>Пара:</b> <code>{symbol}</code> ({side_emoji})\n"
+                        f"📈 <b>Стратегия:</b> <code>Donchian Breakout + Trend</code>\n"
+                        f"💵 <b>Цена входа:</b> <code>${current_price:.2f}</code>\n"
+                        f"🛡 <b>Стоп-лосс (риск):</b> <code>${stop_loss:.2f}</code> (-1.5%)\n"
+                        f"🎯 <b>Тейк-профит (цель):</b> <code>${take_profit:.2f}</code> (+3.5%)\n"
+                        f"💰 <b>Размер позиции:</b> <code>${trade_size:.2f}</code> | Баланс: <code>${self.portfolio.crypto_balance:.2f}</code>"
                     )
-                    await notifier.send_message(alert)
+                    await notifier.send_message(alert, parse_mode="HTML")
                     logger.info(f"[Crypto] Opened paper trade on {symbol} ({signal}) at {current_price}")
