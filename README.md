@@ -1,16 +1,18 @@
 ---
-title: Crypto Tournament Bot
+title: Rypto Tournament Bot
 emoji: 🏆
-colorFrom: blue
+colorFrom: pink
 colorTo: indigo
-sdk: docker
-app_port: 7860
+sdk: gradio
+sdk_version: 6.30.0
+app_file: app.py
 pinned: false
+license: mit
 ---
 
 # 🏆 Crypto Algorithmic Tournament Bot
 
-Автономный турнир 3 независимых алгоритмических стратегий для криптовалютного рынка (**BTC / ETH / SOL**) в 100% безопасном режиме **Paper Trading** (симуляция на реальных рыночных стаканах и котировках OKX).
+Автономный турнир 3 независимых алгоритмических стратегий для криптовалютного рынка (**BTC / ETH / SOL**) в 100% безопасном режиме **Paper Trading** (симуляция на реальных рыночных данных OKX).
 
 Каждой стратегии выделен изолированный бюджет **$100.00**.
 
@@ -42,9 +44,3 @@ pinned: false
 * `/trades` — все активные позиции по каждой стратегии
 * `/leaderboard` — текущий рейтинг эффективности
 * `/help` — список команд
-
----
-
-## 🌐 Web Дашборд
-
-Дашборд с живым автообновлением турнирной таблицы доступен прямо в окне Hugging Face Space на порту `7860`.
