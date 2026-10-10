@@ -14,6 +14,14 @@ from strategies.trend_strategy import TrendStrategy
 from strategies.grid_strategy import GridStrategy
 from strategies.reversion_strategy import MeanReversionStrategy
 
+try:
+    import spaces
+    @spaces.GPU
+    def dummy_gpu_task():
+        return True
+except Exception:
+    pass
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
