@@ -193,11 +193,14 @@ class TournamentManager:
 
     def get_summary(self, live_prices: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
         strats = self.get_leaderboard(live_prices)
-        total_initial = sum(s["cash"] + s["invested"] for s in strats) # ~300
         total_equity = sum(s["equity"] for s in strats)
+        total_cash = sum(s["cash"] for s in strats)
+        total_open = sum(s["open_count"] for s in strats)
         total_pnl = total_equity - 300.0
         return {
             "total_equity": round(total_equity, 2),
+            "total_cash": round(total_cash, 2),
+            "total_open_positions": total_open,
             "total_pnl": round(total_pnl, 2),
             "total_pnl_pct": round((total_pnl / 300.0) * 100, 2),
             "leaderboard": strats

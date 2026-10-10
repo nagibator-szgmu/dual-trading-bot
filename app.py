@@ -263,7 +263,7 @@ def run_async_services():
         )
     )
 
-with gr.Blocks(title="🏆 Crypto Algorithmic Tournament Bot", theme=gr.themes.Base()) as demo:
+with gr.Blocks(title="🏆 Crypto Algorithmic Tournament Bot") as demo:
     dashboard_ui = gr.HTML(value=generate_dashboard_html)
     demo.load(fn=generate_dashboard_html, outputs=dashboard_ui, every=5)
 
