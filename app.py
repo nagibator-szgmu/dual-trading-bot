@@ -107,10 +107,22 @@ async def telegram_command_listener():
                             text = (msg.get("text", "")).strip().lower()
                             chat_id = str(msg.get("chat", {}).get("id", ""))
 
-                            if chat_id != str(config.TELEGRAM_CHAT_ID):
-                                continue
+                            if text in ["/start", "старт"]:
+                                reply = (
+                                    "👋 <b>Добро пожаловать в турнир Торговых Алгоритмов 24/7!</b>\n\n"
+                                    "В этом боте 3 независимые алгоритмические стратегии соревнуются на реальном рынке криптовалют (BTC / ETH / SOL):\n"
+                                    "1. ⚡ <b>Long-Only Трендовый пробой</b> (Donchian + EMA50)\n"
+                                    "2. 🕸️ <b>Спотовая Сетка</b> (Trend-Hedged Grid 2.0%)\n"
+                                    "3. 🌊 <b>Возврат к средней</b> (RSI + Bollinger Bands)\n\n"
+                                    "📊 <b>Команды:</b>\n"
+                                    "• /status или /leaderboard — текущий баланс, PnL и рейтинг\n"
+                                    "• /trades — детальный список открытых сделок\n"
+                                    "• /export — скачать базу данных (CSV / JSON)\n"
+                                    "• /help — справка"
+                                )
+                                await notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
 
-                            if text in ["/status", "/balance", "/leaderboard"]:
+                            elif text in ["/status", "/balance", "/leaderboard"]:
                                 summary = tournament.get_summary(live_prices)
                                 lb = tournament.get_leaderboard(live_prices)
                                 table_data = []
@@ -136,7 +148,7 @@ async def telegram_command_listener():
                                     f"⚡ <b>Открыто позиций:</b> {summary['total_open_positions']}\n\n"
                                     f"<pre>{html.escape(ascii_table)}</pre>"
                                 )
-                                await notifier.send_message(reply, parse_mode="HTML")
+                                await notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
 
                             elif text in ["/trades", "/positions", "сделки"]:
                                 lines = ["📊 <b>АКТИВНЫЕ СДЕЛКИ ПО СТРАТЕГИЯМ:</b>\n"]
@@ -164,7 +176,7 @@ async def telegram_command_listener():
                                     reply = "📭 На данный момент активных сделок нет. Алгоритмы сканируют рынок."
                                 else:
                                     reply = "\n".join(lines)
-                                await notifier.send_message(reply, parse_mode="HTML")
+                                await notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
 
                             elif text in ["/export", "/csv", "/data", "/database", "/отчет", "экспорт"]:
                                 csv_file = tournament.export_csv("tournament_trades.csv")
@@ -176,9 +188,9 @@ async def telegram_command_listener():
                                     "• Файл <code>tournament_trades.csv</code> — плоская таблица всех сделок (Excel / Pandas / ChatGPT Code Interpreter).\n"
                                     "• Загрузи этот файл в любой AI (Claude / ChatGPT / DeepSeek) для анализа метрик и оптимизации параметров!"
                                 )
-                                await notifier.send_document(csv_file, caption=caption)
+                                await notifier.send_document(csv_file, chat_id=chat_id, caption=caption)
                                 if os.path.exists(json_file):
-                                    await notifier.send_document(json_file, caption="🗄️ <code>portfolio_state.json</code> — полный сырой JSON-дамп состояния турнира.")
+                                    await notifier.send_document(json_file, chat_id=chat_id, caption="🗄️ <code>portfolio_state.json</code> — полный сырой JSON-дамп состояния турнира.")
 
                             elif text in ["/help", "помощь"]:
                                 reply = (
@@ -188,7 +200,7 @@ async def telegram_command_listener():
                                     "• /export — <b>выгрузить CSV и JSON базы данных в файл</b> для передачи другому AI\n"
                                     "• /help — эта справка"
                                 )
-                                await notifier.send_message(reply, parse_mode="HTML")
+                                await notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
 
         except Exception as e:
             logger.debug(f"Command listener error: {e}")

@@ -56,20 +56,22 @@ class TelegramNotifier:
             except Exception:
                 pass
 
-    async def send_message(self, text: str, parse_mode: str = "HTML") -> bool:
+    async def send_message(self, text: str, chat_id: Optional[str] = None, parse_mode: str = "HTML") -> bool:
         if not self.token:
             print(f"\n[TG ALERT MOCK]:\n{text}\n")
             return False
 
-        if not self.chat_id:
+        target_id = chat_id or self.chat_id
+        if not target_id:
             found = await self.auto_discover_chat_id()
             if not found:
                 print(f"\n[TG WAITING FOR /start]:\n{text}\n")
                 return False
+            target_id = self.chat_id
 
         url = f"https://api.telegram.org/bot{self.token}/sendMessage"
         payload = {
-            "chat_id": self.chat_id,
+            "chat_id": target_id,
             "text": text,
             "parse_mode": parse_mode,
             "disable_web_page_preview": True
@@ -86,7 +88,7 @@ class TelegramNotifier:
                         logger.warning(f"Telegram formatting error ({err}), falling back to plain text...")
                         clean_text = text.replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", "").replace("<code>", "").replace("</code>", "")
                         payload_plain = {
-                            "chat_id": self.chat_id,
+                            "chat_id": target_id,
                             "text": clean_text,
                             "disable_web_page_preview": True
                         }
@@ -96,13 +98,14 @@ class TelegramNotifier:
             logger.warning(f"Failed to send Telegram message: {e}")
             return False
 
-    async def send_document(self, file_path: str, caption: str = "") -> bool:
-        if not self.token or not self.chat_id:
+    async def send_document(self, file_path: str, chat_id: Optional[str] = None, caption: str = "") -> bool:
+        target_id = chat_id or self.chat_id
+        if not self.token or not target_id:
             return False
         url = f"https://api.telegram.org/bot{self.token}/sendDocument"
         try:
             data = aiohttp.FormData()
-            data.add_field("chat_id", self.chat_id)
+            data.add_field("chat_id", target_id)
             if caption:
                 data.add_field("caption", caption)
                 data.add_field("parse_mode", "HTML")
