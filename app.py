@@ -265,7 +265,8 @@ def run_async_services():
 
 with gr.Blocks(title="🏆 Crypto Algorithmic Tournament Bot") as demo:
     dashboard_ui = gr.HTML(value=generate_dashboard_html)
-    demo.load(fn=generate_dashboard_html, outputs=dashboard_ui, every=5)
+    timer = gr.Timer(5)
+    timer.tick(fn=generate_dashboard_html, outputs=dashboard_ui)
 
 if __name__ == "__main__":
     t = threading.Thread(target=run_async_services, daemon=True)
