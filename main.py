@@ -39,13 +39,13 @@ signal.signal(signal.SIGINT, handle_exit)
 signal.signal(signal.SIGTERM, handle_exit)
 
 def print_dashboard():
-    stats = portfolio.get_stats()
+    stats = portfolio.get_stats(crypto_engine.last_prices)
     
     dash = [
         ["Модуль", "Свободно (Cash)", "В сделках", "Всего капитал", "PnL ($)"],
         ["🔮 Polymarket", f"${stats['poly_cash']}", f"${stats['poly_invested']}", f"${stats['poly_equity']}", f"{stats['poly_pnl']:+} $"],
         ["🪙 Crypto (OKX)", f"${stats['crypto_cash']}", f"${stats['crypto_invested']}", f"${stats['crypto_equity']}", f"{stats['crypto_pnl']:+} $"],
-        ["📊 ВСЕГО", f"${stats['total_cash']}", f"${stats['total_invested']}", f"${stats['total_equity']}", f"{stats['total_pnl']:+} $"]
+        ["📊 ВСЕГО", f"${stats['total_cash']}", f"${stats['total_assets']}", f"${stats['total_equity']}", f"{stats['total_pnl']:+} $"]
     ]
     
     print("\n" + "=" * 70)
@@ -83,17 +83,18 @@ async def dashboard_and_heartbeat_loop():
         # Periodic Telegram digest every HEARTBEAT_INTERVAL seconds
         if time.time() - last_heartbeat >= config.HEARTBEAT_INTERVAL:
             last_heartbeat = time.time()
-            stats = portfolio.get_stats()
+            stats = portfolio.get_stats(crypto_engine.last_prices)
             msg = (
                 f"📊 <b>[DUAL BOT СВОДКА ПОРТФЕЛЯ]</b>\n\n"
                 f"🔮 <b>Polymarket:</b>\n"
                 f"• В сделках ({stats['poly_open']} шт): <code>${stats['poly_invested']:.2f}</code>\n"
                 f"• Свободно: <code>${stats['poly_cash']:.2f}</code>\n"
                 f"• Капитал: <code>${stats['poly_equity']:.2f}</code> (PnL: <code>{stats['poly_pnl']:+.2f}$</code>)\n\n"
-                f"🪙 <b>Crypto (OKX):</b>\n"
+                f"🪙 <b>Crypto (OKX live):</b>\n"
                 f"• В сделках ({stats['crypto_open']} шт): <code>${stats['crypto_invested']:.2f}</code>\n"
+                f"• Плавающий PnL: <code>{stats['crypto_floating_pnl']:+.2f}$</code>\n"
                 f"• Свободно: <code>${stats['crypto_cash']:.2f}</code>\n"
-                f"• Капитал: <code>${stats['crypto_equity']:.2f}</code> (PnL: <code>{stats['crypto_pnl']:+.2f}$</code>)\n\n"
+                f"• Капитал: <code>${stats['crypto_equity']:.2f}</code>\n\n"
                 f"💰 <b>ИТОГО КАПИТАЛ:</b> <code>${stats['total_equity']:.2f}</code> (PnL: <code>{stats['total_pnl']:+.2f}$</code>)\n"
                 f"📁 Всего сделок в истории: <code>{stats['total_trades']}</code>"
             )
@@ -125,38 +126,46 @@ async def telegram_command_listener():
                                 continue
 
                             if text in ["/status", "/balance", "баланс", "статус"]:
-                                stats = portfolio.get_stats()
+                                stats = portfolio.get_stats(crypto_engine.last_prices)
                                 reply = (
-                                    f"📊 <b>[ТЕКУЩИЙ СТАТУС ПОРТФЕЛЯ]</b>\n\n"
+                                    f"📊 <b>[ТЕКУЩИЙ СТАТУС ПОРТФЕЛЯ (LIVE)]</b>\n\n"
                                     f"🔮 <b>Polymarket:</b>\n"
-                                    f"• В сделках ({stats['poly_open']} позиций): <code>${stats['poly_invested']:.2f}</code>\n"
+                                    f"• В ставках ({stats['poly_open']} позиций): <code>${stats['poly_invested']:.2f}</code>\n"
                                     f"• Свободно кэша: <code>${stats['poly_cash']:.2f}</code>\n"
-                                    f"• Капитал: <code>${stats['poly_equity']:.2f}</code>\n\n"
-                                    f"🪙 <b>Crypto (OKX):</b>\n"
+                                    f"• Капитал: <code>${stats['poly_equity']:.2f}</code> (PnL: <code>{stats['poly_pnl']:+.2f}$</code>)\n\n"
+                                    f"🪙 <b>Crypto (OKX Live):</b>\n"
                                     f"• В сделках ({stats['crypto_open']} позиций): <code>${stats['crypto_invested']:.2f}</code>\n"
+                                    f"• Плавающий PnL: <code>{stats['crypto_floating_pnl']:+.2f}$</code>\n"
                                     f"• Свободно кэша: <code>${stats['crypto_cash']:.2f}</code>\n"
-                                    f"• Капитал: <code>${stats['crypto_equity']:.2f}</code>\n\n"
-                                    f"💰 <b>ИТОГО КАПИТАЛ:</b> <code>${stats['total_equity']:.2f}</code> (PnL: <code>{stats['total_pnl']:+.2f}$</code>)\n"
+                                    f"• Капитал: <code>${stats['crypto_equity']:.2f}</code> (PnL: <code>{stats['crypto_pnl']:+.2f}$</code>)\n\n"
+                                    f"💰 <b>РЕАЛЬНЫЙ КАПИТАЛ:</b> <code>${stats['total_equity']:.2f}</code> (PnL: <code>{stats['total_pnl']:+.2f}$</code>)\n"
                                     f"📁 Совершено сделок: <code>{stats['total_trades']}</code>"
                                 )
                                 await notifier.send_message(reply, parse_mode="HTML")
 
                             elif text in ["/trades", "/positions", "сделки", "позиции"]:
+                                stats = portfolio.get_stats(crypto_engine.last_prices)
+                                
                                 poly_lines = []
                                 for pos in list(portfolio.poly_positions.values())[-5:]:
-                                    poly_lines.append(f"• <i>{pos['market'][:35]}...</i> ({pos['outcome']}) — ${pos['cost']:.1f}")
-                                
-                                crypto_lines = []
-                                for pos in list(portfolio.crypto_positions.values())[-5:]:
-                                    crypto_lines.append(f"• <b>{pos['symbol']}</b> ({pos['side']}) по ${pos['entry_price']:.2f}")
+                                    poly_lines.append(f"• <i>{pos['market'][:32]}...</i>\n   Ставка: <code>${pos['cost']:.1f}</code> на <code>{pos['outcome']}</code> (в игре)")
 
-                                poly_txt = "\n".join(poly_lines) if poly_lines else "<i>Нет открытых позиций</i>"
+                                crypto_lines = []
+                                for c in stats.get("crypto_details", []):
+                                    emoji = "🟢" if c["pnl"] >= 0 else "🔴"
+                                    crypto_lines.append(
+                                        f"• <b>{c['symbol']}</b> ({c['side']})\n"
+                                        f"   Вход: <code>${c['entry']:.2f}</code> ➔ Сейчас: <code>${c['current']:.2f}</code>\n"
+                                        f"   PnL: {emoji} <code>{c['pnl']:+.2f}$</code> (<code>{c['pnl_pct']:+.2f}%</code>)"
+                                    )
+
+                                poly_txt = "\n".join(poly_lines) if poly_lines else "<i>Нет активных ставок</i>"
                                 crypto_txt = "\n".join(crypto_lines) if crypto_lines else "<i>Нет открытых позиций</i>"
 
                                 reply = (
-                                    f"📋 <b>[АКТИВНЫЕ ПОЗИЦИИ В РАБОТЕ]</b>\n\n"
-                                    f"🔮 <b>Polymarket (последние 5):</b>\n{poly_txt}\n\n"
-                                    f"🪙 <b>Crypto (OKX):</b>\n{crypto_txt}"
+                                    f"📋 <b>[ЖИВЫЕ ПОЗИЦИИ В РАБОТЕ (MARK-TO-MARKET)]</b>\n\n"
+                                    f"🪙 <b>Crypto (с текущей ценой):\n</b>{crypto_txt}\n\n"
+                                    f"🔮 <b>Polymarket (в ожидании финала):\n</b>{poly_txt}"
                                 )
                                 await notifier.send_message(reply, parse_mode="HTML")
 

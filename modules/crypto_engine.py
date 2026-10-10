@@ -41,24 +41,28 @@ class CryptoEngine:
             logger.warning(f"[Crypto] Error fetching candles for {symbol}: {e}")
         return []
 
-    def calculate_indicators(self, candles: List[Dict[str, float]]) -> Optional[Dict[str, float]]:
-        if len(candles) < 20:
+    def calculate_indicators(self, symbol: str, candles: List[Dict[str, float]]) -> Optional[Dict[str, float]]:
+        if len(candles) < 22:
             return None
-        closes = [c["close"] for c in candles]
+            
+        current_tick = candles[-1]["close"]
+        self.last_prices[symbol] = current_tick
+
+        # Use completed bars only (excluding unfinished bar [-1])
+        closed_bars = candles[:-1]
+        closes = [c["close"] for c in closed_bars]
         
-        # Simple moving average / EMA approx
         sma_fast = sum(closes[-7:]) / 7
         sma_slow = sum(closes[-20:]) / 20
         
-        # Donchian channel (highest high & lowest low over last 15 candles except current)
-        highest_prev = max(c["high"] for c in candles[-16:-1])
-        lowest_prev = min(c["low"] for c in candles[-16:-1])
-        
-        current_close = closes[-1]
-        self.last_prices[candles[-1]["ts"]] = current_close
+        # Donchian channel: 15 completed bars before the last closed bar
+        highest_prev = max(c["high"] for c in closed_bars[-16:-1])
+        lowest_prev = min(c["low"] for c in closed_bars[-16:-1])
+        confirmed_close = closes[-1]
         
         return {
-            "close": current_close,
+            "current_price": current_tick,
+            "confirmed_close": confirmed_close,
             "sma_fast": sma_fast,
             "sma_slow": sma_slow,
             "highest_prev": highest_prev,
@@ -110,12 +114,12 @@ class CryptoEngine:
             if not candles:
                 continue
 
-            ind = self.calculate_indicators(candles)
+            ind = self.calculate_indicators(symbol, candles)
             if not ind:
                 continue
 
-            current_price = ind["close"]
-            self.last_prices[symbol] = current_price
+            current_price = ind["current_price"]
+            confirmed_close = ind["confirmed_close"]
 
             # 1. Manage active trades first
             await self.check_open_positions(symbol, current_price)
@@ -126,23 +130,23 @@ class CryptoEngine:
                 continue
 
             # Check if we have free balance
-            trade_size = 10.0  # $10 per trade (10% of $100)
+            trade_size = 10.0  # $10 per trade
             if self.portfolio.crypto_balance < trade_size:
                 continue
 
-            # 3. Strategy rules: Donchian Volatility Breakout + Trend confirmation
+            # 3. Strategy rules: Donchian Volatility Breakout on CONFIRMED CLOSED BAR
             signal = None
             stop_loss = None
             take_profit = None
 
-            # Bullish Breakout: price breaks above 15-min high AND short SMA > long SMA
-            if current_price > ind["highest_prev"] and ind["sma_fast"] > ind["sma_slow"]:
+            # Bullish Breakout: confirmed closed bar breaks above 15-min high AND short SMA > long SMA
+            if confirmed_close > ind["highest_prev"] and ind["sma_fast"] > ind["sma_slow"]:
                 signal = "BUY"
                 stop_loss = round(current_price * 0.985, 2)   # -1.5% SL
                 take_profit = round(current_price * 1.035, 2)  # +3.5% TP (R:R > 1:2)
 
-            # Bearish Breakout: price breaks below 15-min low AND short SMA < long SMA
-            elif current_price < ind["lowest_prev"] and ind["sma_fast"] < ind["sma_slow"]:
+            # Bearish Breakout: confirmed closed bar breaks below 15-min low AND short SMA < long SMA
+            elif confirmed_close < ind["lowest_prev"] and ind["sma_fast"] < ind["sma_slow"]:
                 signal = "SELL"
                 stop_loss = round(current_price * 1.015, 2)   # +1.5% SL
                 take_profit = round(current_price * 0.965, 2)  # -3.5% TP
