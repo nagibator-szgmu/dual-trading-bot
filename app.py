@@ -166,11 +166,26 @@ async def telegram_command_listener():
                                     reply = "\n".join(lines)
                                 await notifier.send_message(reply, parse_mode="HTML")
 
+                            elif text in ["/export", "/csv", "/data", "/database", "/отчет", "экспорт"]:
+                                csv_file = tournament.export_csv("tournament_trades.csv")
+                                json_file = "portfolio_state.json"
+                                tournament.save()
+
+                                caption = (
+                                    "📊 <b>Экспорт данных турнира для AI-анализа:</b>\n\n"
+                                    "• Файл <code>tournament_trades.csv</code> — плоская таблица всех сделок (Excel / Pandas / ChatGPT Code Interpreter).\n"
+                                    "• Загрузи этот файл в любой AI (Claude / ChatGPT / DeepSeek) для анализа метрик и оптимизации параметров!"
+                                )
+                                await notifier.send_document(csv_file, caption=caption)
+                                if os.path.exists(json_file):
+                                    await notifier.send_document(json_file, caption="🗄️ <code>portfolio_state.json</code> — полный сырой JSON-дамп состояния турнира.")
+
                             elif text in ["/help", "помощь"]:
                                 reply = (
                                     "ℹ️ <b>Команды турнира:</b>\n"
                                     "• /leaderboard или /status — лидерборд и рейтинг трех стратегий\n"
                                     "• /trades — детальный список открытых сделок каждой стратегии\n"
+                                    "• /export — <b>выгрузить CSV и JSON базы данных в файл</b> для передачи другому AI\n"
                                     "• /help — эта справка"
                                 )
                                 await notifier.send_message(reply, parse_mode="HTML")
@@ -255,7 +270,7 @@ def generate_dashboard_html():
         </table>
 
         <div style="margin-top: 24px; text-align: center; color: #94a3b8; font-size: 13px;">
-            Управление и живые сигналы: <a href="https://t.me/bu7634bot" target="_blank" style="color: #38bdf8; text-decoration: none; font-weight: 600;">Telegram @bu7634bot</a> | Команды: /status, /trades, /help
+            Управление и экспорт: <a href="https://t.me/bu7634bot" target="_blank" style="color: #38bdf8; text-decoration: none; font-weight: 600;">Telegram @bu7634bot</a> | Команды: /status, /trades, /export, /help
         </div>
     </div>
     """

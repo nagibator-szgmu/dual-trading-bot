@@ -21,7 +21,7 @@ class StrategyPortfolio:
             "cash": self.cash,
             "initial": self.initial,
             "positions": self.positions,
-            "trades": self.trades[-100:]
+            "trades": self.trades[-5000:]
         }
 
     def from_dict(self, data: Dict[str, Any]):
@@ -205,3 +205,35 @@ class TournamentManager:
             "total_pnl_pct": round((total_pnl / 300.0) * 100, 2),
             "leaderboard": strats
         }
+
+    def export_csv(self, file_path: str = "tournament_trades.csv") -> str:
+        import csv
+        with open(file_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "Timestamp",
+                "Strategy",
+                "Symbol",
+                "Action",
+                "Side",
+                "Entry_Price",
+                "Exit_Price",
+                "PnL_USD",
+                "PnL_Percent",
+                "Reason"
+            ])
+            for strat in [self.strat_trend, self.strat_grid, self.strat_reversion]:
+                for t in strat.trades:
+                    writer.writerow([
+                        t.get("time", ""),
+                        strat.name,
+                        t.get("symbol", ""),
+                        t.get("action", ""),
+                        t.get("side", ""),
+                        t.get("entry", t.get("price", "")),
+                        t.get("exit", ""),
+                        t.get("pnl", 0.0),
+                        f"{t.get('pnl_pct', 0.0)}%",
+                        t.get("reason", "")
+                    ])
+        return file_path

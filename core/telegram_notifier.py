@@ -96,4 +96,24 @@ class TelegramNotifier:
             logger.warning(f"Failed to send Telegram message: {e}")
             return False
 
+    async def send_document(self, file_path: str, caption: str = "") -> bool:
+        if not self.token or not self.chat_id:
+            return False
+        url = f"https://api.telegram.org/bot{self.token}/sendDocument"
+        try:
+            data = aiohttp.FormData()
+            data.add_field("chat_id", self.chat_id)
+            if caption:
+                data.add_field("caption", caption)
+                data.add_field("parse_mode", "HTML")
+            with open(file_path, "rb") as f:
+                file_bytes = f.read()
+            data.add_field("document", file_bytes, filename=os.path.basename(file_path))
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, data=data, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+                    return resp.status == 200
+        except Exception as e:
+            logger.warning(f"Failed to send Telegram document: {e}")
+            return False
+
 notifier = TelegramNotifier()
