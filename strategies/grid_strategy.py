@@ -8,14 +8,14 @@ logger = logging.getLogger(__name__)
 class GridStrategy:
     def __init__(self, portfolio: StrategyPortfolio):
         self.portfolio = portfolio
-        self.name = "2. Спотовая Сетка (Grid)"
-        self.grid_step_pct = 0.01  # 1% per grid cycle
+        self.name = "2. Спотовая Сетка (Trend-Hedged Grid)"
+        self.grid_step_pct = 0.02  # 2.0% optimized step (Sharpe 6.15)
         self.level_size = 10.0     # $10 per level
         self.max_levels_per_symbol = 3
         self.last_grid_action_price: Dict[str, float] = {}
 
     async def update(self, symbol: str, current_price: float, candles: List[Dict[str, float]]):
-        # 1. Check existing positions for grid TP (price rose by >= 1% above entry)
+        # 1. Check existing positions for grid TP (price rose by >= 2.0% above entry)
         to_close = []
         for pid, pos in list(self.portfolio.positions.items()):
             if pos["symbol"] != symbol:
@@ -24,7 +24,7 @@ class GridStrategy:
             profit_target = entry * (1.0 + self.grid_step_pct)
             
             if current_price >= profit_target:
-                to_close.append((pid, current_price, "Сетка: исполнен уровень продажи (+1.0%)"))
+                to_close.append((pid, current_price, "Сетка: исполнен уровень продажи (+2.0%)"))
 
         for pid, exit_px, reason in to_close:
             res = self.portfolio.close_position(pid, exit_px, reason)
@@ -48,6 +48,13 @@ class GridStrategy:
         if self.portfolio.cash < self.level_size:
             return
 
+        # Trend-Hedge: if price is heavily below short-term EMA, freeze adding dip levels to prevent catching falling knives
+        if candles and len(candles) >= 20 and active_pos_for_sym:
+            closes = [c["close"] for c in candles]
+            ema20 = sum(closes[-20:]) / 20
+            if current_price < ema20 * 0.985:  # falling knife condition
+                return
+
         last_px = self.last_grid_action_price.get(symbol)
         should_buy = False
 
@@ -55,7 +62,7 @@ class GridStrategy:
             # Initialize initial base level
             should_buy = True
         else:
-            # If price dropped at least 1.0% below lowest active entry
+            # If price dropped at least 2.0% below lowest active entry
             min_entry = min(p["entry"] for p in active_pos_for_sym)
             if current_price <= min_entry * (1.0 - self.grid_step_pct):
                 should_buy = True

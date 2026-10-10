@@ -9,10 +9,10 @@ logger = logging.getLogger(__name__)
 class TrendStrategy:
     def __init__(self, portfolio: StrategyPortfolio):
         self.portfolio = portfolio
-        self.name = "1. Трендовый пробой (15m)"
+        self.name = "1. Long-Only Трендовый пробой (EMA50)"
         self.position_size = 15.0
-        self.stop_loss_pct = 0.015
-        self.take_profit_pct = 0.035
+        self.stop_loss_pct = 0.020   # -2.0%
+        self.take_profit_pct = 0.060  # +6.0% (Reward:Risk = 1 : 3.0)
 
     async def update(self, symbol: str, current_price: float, candles: List[Dict[str, float]]):
         if len(candles) < 25:
@@ -28,25 +28,25 @@ class TrendStrategy:
             tp = pos.get("take_profit")
             if side == "BUY":
                 if sl and current_price <= sl:
-                    to_close.append((pid, current_price, "Стоп-лосс (-1.5%)"))
+                    to_close.append((pid, current_price, "Стоп-лосс (-2.0%)"))
                 elif tp and current_price >= tp:
-                    to_close.append((pid, current_price, "Тейк-профит (+3.5%)"))
+                    to_close.append((pid, current_price, "Тейк-профит (+6.0%)"))
             elif side == "SELL":
                 if sl and current_price >= sl:
-                    to_close.append((pid, current_price, "Стоп-лосс (-1.5%)"))
+                    to_close.append((pid, current_price, "Стоп-лосс (-2.0%)"))
                 elif tp and current_price <= tp:
-                    to_close.append((pid, current_price, "Тейк-профит (+3.5%)"))
+                    to_close.append((pid, current_price, "Тейк-профит (+6.0%)"))
 
         for pid, exit_px, reason in to_close:
             res = self.portfolio.close_position(pid, exit_px, reason)
             if res:
                 emoji = "🟢" if res["pnl"] >= 0 else "🔴"
                 msg = (
-                    f"{emoji} <b>[ТРЕНД 15m — СДЕЛКА ЗАКРЫТА]</b>\n"
+                    f"{emoji} <b>[ТРЕНД 1H — СДЕЛКА ЗАКРЫТА]</b>\n"
                     f"🪙 <b>Пара:</b> <code>{res['symbol']}</code> ({res['side']})\n"
                     f"🚪 <b>Причина:</b> <code>{reason}</code>\n"
                     f"🎯 <b>Вход:</b> <code>${res['entry']:.2f}</code> ➔ <b>Выход:</b> <code>${res['exit']:.2f}</code>\n"
-                    f"💵 <b>PnL:</b> <code>{res['pnl']:+.2f}$</code> (<code>{res['pnl_pct']:+.2f}%</code>)\n"
+                    f"💵 <b>PnL (с комиссиями):</b> <code>{res['pnl']:+.2f}$</code> (<code>{res['pnl_pct']:+.2f}%</code>)\n"
                     f"💰 <b>Баланс тренд-банка:</b> <code>${self.portfolio.cash:.2f}</code>"
                 )
                 await notifier.send_message(msg, parse_mode="HTML")
@@ -64,21 +64,17 @@ class TrendStrategy:
         ema_fast = sum(closes[-10:]) / 10
         ema_slow = sum(closes[-25:]) / 25
         highest_prev = max(c["high"] for c in closed_bars[-21:-1])
-        lowest_prev = min(c["low"] for c in closed_bars[-21:-1])
         confirmed_close = closes[-1]
 
         signal = None
         sl = None
         tp = None
 
+        # Long-Only filter: Buy only on verified breakout above resistance with EMA trend confirmation
         if confirmed_close > highest_prev and ema_fast > ema_slow:
             signal = "BUY"
             sl = round(current_price * (1.0 - self.stop_loss_pct), 2)
             tp = round(current_price * (1.0 + self.take_profit_pct), 2)
-        elif confirmed_close < lowest_prev and ema_fast < ema_slow:
-            signal = "SELL"
-            sl = round(current_price * (1.0 + self.stop_loss_pct), 2)
-            tp = round(current_price * (1.0 - self.take_profit_pct), 2)
 
         if signal:
             trade_id = self.portfolio.open_position(
@@ -88,7 +84,7 @@ class TrendStrategy:
                 amount_usd=self.position_size,
                 stop_loss=sl,
                 take_profit=tp,
-                strategy_detail="Donchian Breakout + EMA"
+                strategy_detail="Donchian Breakout + EMA (Long-Only)"
             )
             if trade_id:
                 side_emoji = "🚀 ЛОНГ" if signal == "BUY" else "🔻 ШОРТ"
