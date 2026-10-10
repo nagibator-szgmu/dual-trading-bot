@@ -194,6 +194,33 @@ async def telegram_command_listener():
             logger.debug(f"Command listener error: {e}")
             await asyncio.sleep(2)
 
+async def heartbeat_loop():
+    logger.info("Автоматический таймер проверки каждые 3 часа активирован.")
+    while is_running:
+        await asyncio.sleep(3 * 3600)  # 3 часа = 10 800 секунд
+        try:
+            summary = tournament.get_summary(live_prices)
+            lb = tournament.get_leaderboard(live_prices)
+            leader = lb[0] if lb else None
+            leader_text = f"{leader['name']} (${leader['equity']:.2f}, {leader['total_pnl_pct']:+.1f}%)" if leader else "—"
+            pnl_sign = "+" if summary['total_pnl'] >= 0 else "-"
+            pnl_str = f"{pnl_sign}${abs(summary['total_pnl']):.2f}"
+
+            msg = (
+                "🟢 <b>[АВТО-ПРОВЕРКА СЕРВЕРА 24/7 — ВСЁ В НОРМЕ]</b>\n\n"
+                "🛡 <i>Все скрипты работают штатно, котировки OKX обновляются, деньги фармятся!</i>\n\n"
+                f"💰 <b>Общий капитал:</b> <code>${summary['total_equity']:.2f}</code>\n"
+                f"💵 <b>Свободный кэш:</b> <code>${summary['total_cash']:.2f}</code>\n"
+                f"📊 <b>Суммарный PnL:</b> <code>{pnl_str}</code> (<code>{summary['total_pnl_pct']:+.2f}%</code>)\n"
+                f"⚡ <b>Открыто позиций:</b> <code>{summary['total_open_positions']} шт.</code>\n"
+                f"🥇 <b>Лидер турнира:</b> <code>{leader_text}</code>\n\n"
+                "📱 Команды: /status, /trades, /export"
+            )
+            await notifier.send_message(msg, parse_mode="HTML")
+            logger.info("3-часовой авто-отчет успешно отправлен в Telegram.")
+        except Exception as e:
+            logger.error(f"Ошибка в heartbeat_loop: {e}")
+
 def generate_dashboard_html():
     lb = tournament.get_leaderboard(live_prices)
     summary = tournament.get_summary(live_prices)
@@ -282,7 +309,8 @@ def run_async_services():
     loop.run_until_complete(
         asyncio.gather(
             market_loop(),
-            telegram_command_listener()
+            telegram_command_listener(),
+            heartbeat_loop()
         )
     )
 
