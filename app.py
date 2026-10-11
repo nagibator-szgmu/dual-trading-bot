@@ -20,13 +20,7 @@ from strategies.hyper_cascade_strategy import HyperCascadeSniperStrategy
 from core.cs2_notifier import cs2_notifier
 from core.cs2_sniper import cs2_sniper
 
-try:
-    import spaces
-    @spaces.GPU
-    def dummy_gpu_task():
-        return True
-except Exception:
-    pass
+# ZeroGPU removed for 24/7 persistent CPU operation
 
 logging.basicConfig(
     level=logging.INFO,
@@ -76,25 +70,28 @@ async def fetch_candles(symbol: str, bar: str = "15m", limit: int = 40):
 
 async def market_loop():
     while is_running:
-        for symbol in config.SYMBOLS:
-            candles = await fetch_candles(symbol)
-            if not candles:
-                continue
+        try:
+            for symbol in config.SYMBOLS:
+                candles = await fetch_candles(symbol)
+                if not candles:
+                    continue
 
-            current_price = candles[-1]["close"]
-            live_prices[symbol] = current_price
+                current_price = candles[-1]["close"]
+                live_prices[symbol] = current_price
 
-            await asyncio.gather(
-                strat_trend.update(symbol, current_price, candles),
-                strat_grid.update(symbol, current_price, candles),
-                strat_reversion.update(symbol, current_price, candles),
-                strat_squeeze.update(symbol, current_price, candles),
-                strat_adaptive_grid.update(symbol, current_price, candles),
-                strat_dump_hunter.update(symbol, current_price, candles),
-                strat_cascade.update(symbol, current_price, candles)
-            )
+                await asyncio.gather(
+                    strat_trend.update(symbol, current_price, candles),
+                    strat_grid.update(symbol, current_price, candles),
+                    strat_reversion.update(symbol, current_price, candles),
+                    strat_squeeze.update(symbol, current_price, candles),
+                    strat_adaptive_grid.update(symbol, current_price, candles),
+                    strat_dump_hunter.update(symbol, current_price, candles),
+                    strat_cascade.update(symbol, current_price, candles)
+                )
 
-        tournament.save()
+            tournament.save()
+        except Exception as e:
+            logger.error(f"Error in market_loop: {e}")
         await asyncio.sleep(config.SCAN_INTERVAL)
 
 async def telegram_command_listener():
@@ -571,17 +568,39 @@ async def cs2_telegram_command_listener():
             await asyncio.sleep(2)
 
 def run_async_services():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(
-        asyncio.gather(
-            market_loop(),
-            telegram_command_listener(),
-            heartbeat_loop(),
-            cs2_sniper_loop(),
-            cs2_telegram_command_listener()
-        )
-    )
+    while is_running:
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            logger.info("Starting async background services event loop...")
+            loop.run_until_complete(
+                asyncio.gather(
+                    market_loop(),
+                    telegram_command_listener(),
+                    heartbeat_loop(),
+                    cs2_sniper_loop(),
+                    cs2_telegram_command_listener(),
+                    return_exceptions=True
+                )
+            )
+        except Exception as e:
+            logger.error(f"Async services crashed, auto-restarting in 5s: {e}")
+            time.sleep(5)
+
+_bg_started = False
+_bg_lock = threading.Lock()
+
+def ensure_background_services():
+    global _bg_started
+    with _bg_lock:
+        if not _bg_started:
+            _bg_started = True
+            t = threading.Thread(target=run_async_services, daemon=True, name="TradingAsyncServices")
+            t.start()
+            logger.info(">>> Background async trading services STARTED in thread <<<")
+
+# Auto-start on module load (guarantees execution under uvicorn, gradio cli, or python app.py)
+ensure_background_services()
 
 with gr.Blocks(title="🏆 Crypto & CS2 Quant Trading Platform") as demo:
     with gr.Tabs():
@@ -593,10 +612,10 @@ with gr.Blocks(title="🏆 Crypto & CS2 Quant Trading Platform") as demo:
     timer = gr.Timer(5)
     timer.tick(fn=generate_dashboard_html, outputs=crypto_ui)
     timer.tick(fn=generate_cs2_dashboard_html, outputs=cs2_ui)
+    demo.load(fn=ensure_background_services)
 
 if __name__ == "__main__":
-    t = threading.Thread(target=run_async_services, daemon=True)
-    t.start()
+    ensure_background_services()
     port = int(os.getenv("PORT", "7860"))
     logger.info(f"Запуск Gradio платформы на порту {port}...")
     demo.launch(server_name="0.0.0.0", server_port=port)
