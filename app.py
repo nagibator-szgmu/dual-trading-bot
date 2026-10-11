@@ -16,6 +16,7 @@ from strategies.reversion_strategy import MeanReversionStrategy
 from strategies.squeeze_strategy import VolatilitySqueezeStrategy
 from strategies.adaptive_grid_strategy import AdaptiveGridStrategy
 from strategies.dump_hunter_strategy import FlashDumpHunterStrategy
+from strategies.hyper_cascade_strategy import HyperCascadeSniperStrategy
 
 try:
     import spaces
@@ -40,6 +41,7 @@ strat_reversion = MeanReversionStrategy(tournament.strat_reversion)
 strat_squeeze = VolatilitySqueezeStrategy(tournament.strat_squeeze)
 strat_adaptive_grid = AdaptiveGridStrategy(tournament.strat_adaptive_grid)
 strat_dump_hunter = FlashDumpHunterStrategy(tournament.strat_dump_hunter)
+strat_cascade = HyperCascadeSniperStrategy(tournament.strat_cascade)
 
 live_prices = {}
 is_running = True
@@ -86,7 +88,8 @@ async def market_loop():
                 strat_reversion.update(symbol, current_price, candles),
                 strat_squeeze.update(symbol, current_price, candles),
                 strat_adaptive_grid.update(symbol, current_price, candles),
-                strat_dump_hunter.update(symbol, current_price, candles)
+                strat_dump_hunter.update(symbol, current_price, candles),
+                strat_cascade.update(symbol, current_price, candles)
             )
 
         tournament.save()
@@ -115,13 +118,14 @@ async def telegram_command_listener():
                             if text in ["/start", "старт"]:
                                 reply = (
                                     "👋 <b>Добро пожаловать в турнир Торговых Алгоритмов 24/7!</b>\n\n"
-                                    "В этом боте 6 независимых алгоритмических стратегий соревнуются на реальном рынке криптовалют (BTC / ETH / SOL / DOGE) с равным бюджетом $100 каждая ($600 суммарно):\n"
+                                    "В этом боте 7 независимых алгоритмических стратегий соревнуются на реальном рынке криптовалют (BTC / ETH / SOL / DOGE) с равным бюджетом $100 каждая ($700 суммарно):\n"
                                     "1. ⚡ <b>Long-Only Трендовый пробой</b> (Donchian + EMA50)\n"
                                     "2. 🕸️ <b>Спотовая Сетка</b> (Trend-Hedged Grid 2.0%)\n"
                                     "3. 🌊 <b>Возврат к средней</b> (RSI + Bollinger Bands)\n"
                                     "4. 💥 <b>Квантовая Пружина</b> (ATR Volatility Squeeze Breakout)\n"
                                     "5. 📐 <b>Адаптивная Сетка</b> (ATR Dynamic Step Grid)\n"
-                                    "6. 🎯 <b>Охотник за сквизами</b> (Flash Dump & Liquidation Hunter)\n\n"
+                                    "6. 🎯 <b>Охотник за сквизами</b> (Flash Dump & Liquidation Hunter)\n"
+                                    "7. 🚀 <b>HyperCascade Sniper</b> (Anti-Martingale Пирамидинг & Пампы)\n\n"
                                     "📊 <b>Команды:</b>\n"
                                     "• /status или /leaderboard — текущий баланс, PnL и рейтинг\n"
                                     "• /trades — детальный список открытых сделок\n"
@@ -134,7 +138,7 @@ async def telegram_command_listener():
                                 summary = tournament.get_summary(live_prices)
                                 lb = tournament.get_leaderboard(live_prices)
                                 table_data = []
-                                medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣"]
+                                medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
                                 for i, s in enumerate(lb):
                                     pnl_sign = "+" if s['total_pnl'] >= 0 else ""
                                     medal = medals[i] if i < len(medals) else f"#{i+1}"
@@ -168,7 +172,8 @@ async def telegram_command_listener():
                                     ("🌊 Mean Reversion", tournament.strat_reversion),
                                     ("💥 Volatility Squeeze", tournament.strat_squeeze),
                                     ("📐 Adaptive Grid", tournament.strat_adaptive_grid),
-                                    ("🎯 Flash Dump Hunter", tournament.strat_dump_hunter)
+                                    ("🎯 Flash Dump Hunter", tournament.strat_dump_hunter),
+                                    ("🚀 HyperCascade Sniper", tournament.strat_cascade)
                                 ]:
                                     if strat.positions:
                                         has_trades = True
@@ -250,7 +255,7 @@ def generate_dashboard_html():
     summary = tournament.get_summary(live_prices)
 
     rows_html = ""
-    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣"]
+    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
     for i, s in enumerate(lb):
         pnl_color = "#34d399" if s['total_pnl'] >= 0 else "#f87171"
         pnl_str = f"+${s['total_pnl']:.2f}" if s['total_pnl'] >= 0 else f"-${abs(s['total_pnl']):.2f}"

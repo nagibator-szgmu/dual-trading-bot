@@ -56,6 +56,26 @@ class StrategyPortfolio:
         })
         return trade_id
 
+    def add_to_position(self, trade_id: str, add_price: float, add_amount_usd: float) -> bool:
+        if trade_id not in self.positions or self.cash < add_amount_usd:
+            return False
+        self.cash -= add_amount_usd
+        pos = self.positions[trade_id]
+        old_amt = pos["amount"]
+        old_entry = pos["entry"]
+        new_amt = old_amt + add_amount_usd
+        new_entry = ((old_amt * old_entry) + (add_amount_usd * add_price)) / new_amt
+        pos["amount"] = new_amt
+        pos["entry"] = round(new_entry, 4)
+        self.trades.append({
+            "action": "PYRAMID_BUY",
+            "symbol": pos["symbol"],
+            "price": add_price,
+            "amount": add_amount_usd,
+            "time": time.strftime("%Y-%m-%d %H:%M:%S")
+        })
+        return True
+
     def close_position(self, trade_id: str, exit_price: float, reason: str):
         if trade_id not in self.positions:
             return None
@@ -157,13 +177,15 @@ class TournamentManager:
         self.strat_squeeze = StrategyPortfolio("4. Квантовая Пружина (Squeeze)", "squeeze", initial_budget)
         self.strat_adaptive_grid = StrategyPortfolio("5. Адаптивная Сетка (ATR)", "adaptive_grid", initial_budget)
         self.strat_dump_hunter = StrategyPortfolio("6. Охотник за сквизами (Dump)", "dump_hunter", initial_budget)
+        self.strat_cascade = StrategyPortfolio("7. HyperCascade Sniper (Пирамидинг)", "cascade", initial_budget)
         self.strategies = [
             self.strat_trend,
             self.strat_grid,
             self.strat_reversion,
             self.strat_squeeze,
             self.strat_adaptive_grid,
-            self.strat_dump_hunter
+            self.strat_dump_hunter,
+            self.strat_cascade
         ]
         self.total_initial = len(self.strategies) * initial_budget
         self.load()
