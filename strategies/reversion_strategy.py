@@ -65,6 +65,7 @@ class MeanReversionStrategy:
             if pos["symbol"] != symbol:
                 continue
             side = pos["side"]
+            entry = pos["entry"]
             sl = pos.get("stop_loss")
             tp = pos.get("take_profit")
 
