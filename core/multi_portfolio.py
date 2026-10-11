@@ -44,6 +44,7 @@ class StrategyPortfolio:
             "stop_loss": stop_loss,
             "take_profit": take_profit,
             "strategy": strategy_detail,
+            "opened_at_ts": time.time(),
             "time": time.strftime("%Y-%m-%d %H:%M:%S")
         }
         self.trades.append({

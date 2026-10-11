@@ -1,5 +1,6 @@
 import logging
 import math
+import time
 from typing import List, Dict, Any, Optional
 from core.multi_portfolio import StrategyPortfolio
 from core.telegram_notifier import notifier
@@ -69,16 +70,30 @@ class MeanReversionStrategy:
             sl = pos.get("stop_loss")
             tp = pos.get("take_profit")
 
+            # Time-Stop: 4 hours (14400s) for mean-reversion impulses
+            now_ts = time.time()
+            open_ts = pos.get("opened_at_ts")
+            if not open_ts and pos.get("time"):
+                try:
+                    open_ts = time.mktime(time.strptime(pos["time"], "%Y-%m-%d %H:%M:%S"))
+                except Exception:
+                    open_ts = now_ts
+            time_elapsed = now_ts - (open_ts or now_ts)
+
             if side == "BUY":
                 if sl and current_price <= sl:
                     to_close.append((pid, current_price, "Стоп-лосс (-1.8%)"))
                 elif current_price >= tp and current_price >= entry * 1.015:  # Target hit and covers fees!
                     to_close.append((pid, current_price, f"Тейк-профит к средней (+{(current_price-entry)/entry*100:.1f}%)"))
+                elif time_elapsed >= 4 * 3600:
+                    to_close.append((pid, current_price, "Таймаут удержания (Time-Stop 4ч)"))
             elif side == "SELL":
                 if sl and current_price >= sl:
                     to_close.append((pid, current_price, "Стоп-лосс (-1.8%)"))
                 elif current_price <= tp and current_price <= entry * 0.985:  # Target hit and covers fees!
                     to_close.append((pid, current_price, f"Тейк-профит к средней (+{(entry-current_price)/entry*100:.1f}%)"))
+                elif time_elapsed >= 4 * 3600:
+                    to_close.append((pid, current_price, "Таймаут удержания (Time-Stop 4ч)"))
 
         for pid, exit_px, reason in to_close:
             res = self.portfolio.close_position(pid, exit_px, reason)

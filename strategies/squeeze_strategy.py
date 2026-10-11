@@ -1,5 +1,6 @@
 import logging
 import math
+import time
 from typing import List, Dict, Any, Optional
 from core.multi_portfolio import StrategyPortfolio
 from core.telegram_notifier import notifier
@@ -71,13 +72,42 @@ class VolatilitySqueezeStrategy:
             if pos["symbol"] != symbol:
                 continue
             side = pos["side"]
+            entry = pos["entry"]
             sl = pos.get("stop_loss")
             tp = pos.get("take_profit")
+
+            # Breakeven Trailing: when profit reaches +1.5%, lock SL at entry + 0.2%
+            if not pos.get("breakeven") and current_price >= entry * 1.015:
+                new_sl = round(entry * 1.002, 2)
+                pos["stop_loss"] = new_sl
+                pos["breakeven"] = True
+                sl = new_sl
+                be_msg = (
+                    f"🛡 <b>[КВАНТОВАЯ ПРУЖИНА — ПЕРЕВОД В БЕЗУБЫТОК]</b>\n"
+                    f"🪙 <b>Пара:</b> <code>{symbol}</code> (BUY)\n"
+                    f"🎯 <b>Вход:</b> <code>${entry:.2f}</code> ➔ <b>Тек:</b> <code>${current_price:.2f}</code> (+1.5%)\n"
+                    f"🔒 <b>Новый Стоп-Лосс:</b> <code>${new_sl:.2f}</code> (гарантия нулевого риска)"
+                )
+                await notifier.send_message(be_msg, parse_mode="HTML")
+
+            # Time-Stop check: 6 hours (21600s)
+            now_ts = time.time()
+            open_ts = pos.get("opened_at_ts")
+            if not open_ts and pos.get("time"):
+                try:
+                    open_ts = time.mktime(time.strptime(pos["time"], "%Y-%m-%d %H:%M:%S"))
+                except Exception:
+                    open_ts = now_ts
+            time_elapsed = now_ts - (open_ts or now_ts)
+
             if side == "BUY":
                 if sl and current_price <= sl:
-                    to_close.append((pid, current_price, "Стоп-лосс (-1.8%)"))
+                    reason = "Безубыток (+0.2%)" if pos.get("breakeven") and current_price >= entry else "Стоп-лосс (-1.8%)"
+                    to_close.append((pid, current_price, reason))
                 elif tp and current_price >= tp:
                     to_close.append((pid, current_price, "Тейк-профит импульса (+5.5%)"))
+                elif time_elapsed >= 6 * 3600:
+                    to_close.append((pid, current_price, "Таймаут удержания (Time-Stop 6ч)"))
 
         for pid, exit_px, reason in to_close:
             res = self.portfolio.close_position(pid, exit_px, reason)

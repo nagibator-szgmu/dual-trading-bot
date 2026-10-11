@@ -17,6 +17,6 @@ class Config:
     SCAN_INTERVAL: int = 15  # Seconds between scan loops
     HEARTBEAT_INTERVAL: int = 300  # Tournament digest every 5 minutes
 
-    SYMBOLS = ["BTC-USDT", "ETH-USDT", "SOL-USDT"]
+    SYMBOLS = ["BTC-USDT", "ETH-USDT", "SOL-USDT", "DOGE-USDT"]
 
 config = Config()

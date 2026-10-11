@@ -1,5 +1,6 @@
 import logging
 import math
+import time
 from typing import List, Dict, Any, Optional
 from core.multi_portfolio import StrategyPortfolio
 from core.telegram_notifier import notifier
@@ -53,10 +54,22 @@ class FlashDumpHunterStrategy:
             sl = pos.get("stop_loss")
             tp = pos.get("take_profit")
 
+            # Time-Stop: 4 hours (14400s) for liquidation bounce
+            now_ts = time.time()
+            open_ts = pos.get("opened_at_ts")
+            if not open_ts and pos.get("time"):
+                try:
+                    open_ts = time.mktime(time.strptime(pos["time"], "%Y-%m-%d %H:%M:%S"))
+                except Exception:
+                    open_ts = now_ts
+            time_elapsed = now_ts - (open_ts or now_ts)
+
             if sl and current_price <= sl:
                 to_close.append((pid, current_price, "Стоп-лосс сквиза (-2.0%)"))
             elif tp and current_price >= tp:
                 to_close.append((pid, current_price, "Тейк-профит V-отскока (+2.8%)"))
+            elif time_elapsed >= 4 * 3600:
+                to_close.append((pid, current_price, "Таймаут удержания (Time-Stop 4ч)"))
 
         for pid, exit_px, reason in to_close:
             res = self.portfolio.close_position(pid, exit_px, reason)
