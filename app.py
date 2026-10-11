@@ -20,7 +20,15 @@ from strategies.hyper_cascade_strategy import HyperCascadeSniperStrategy
 from core.cs2_notifier import cs2_notifier
 from core.cs2_sniper import cs2_sniper
 
-# ZeroGPU removed for 24/7 persistent CPU operation
+try:
+    import spaces
+    @spaces.GPU
+    def dummy_gpu_task():
+        return True
+    dummy_gpu_task()
+except Exception:
+    def dummy_gpu_task():
+        return True
 
 logging.basicConfig(
     level=logging.INFO,
