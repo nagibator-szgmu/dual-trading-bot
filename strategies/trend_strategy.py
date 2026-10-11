@@ -14,6 +14,9 @@ class TrendStrategy:
         self.stop_loss_pct = 0.020   # -2.0%
         self.take_profit_pct = 0.060  # +6.0% (Reward:Risk = 1 : 3.0)
 
+    def round_price(self, px: float) -> float:
+        return round(px, 4 if px < 10.0 else 2)
+
     async def update(self, symbol: str, current_price: float, candles: List[Dict[str, float]]):
         if len(candles) < 25:
             return
@@ -31,15 +34,15 @@ class TrendStrategy:
             # Breakeven Trailing: when profit reaches +1.5%, lock SL at entry + 0.2% (zero risk + fee coverage)
             if not pos.get("breakeven"):
                 if side == "BUY" and current_price >= entry * 1.015:
-                    new_sl = round(entry * 1.002, 2)
+                    new_sl = self.round_price(entry * 1.002)
                     pos["stop_loss"] = new_sl
                     pos["breakeven"] = True
                     sl = new_sl
                     be_msg = (
                         f"🛡 <b>[ТРЕНД 1H — ПЕРЕВОД В БЕЗУБЫТОК]</b>\n"
                         f"🪙 <b>Пара:</b> <code>{symbol}</code> (BUY)\n"
-                        f"🎯 <b>Вход:</b> <code>${entry:.2f}</code> ➔ <b>Тек:</b> <code>${current_price:.2f}</code> (+1.5%)\n"
-                        f"🔒 <b>Новый Стоп-Лосс:</b> <code>${new_sl:.2f}</code> (гарантия нулевого риска)"
+                        f"🎯 <b>Вход:</b> <code>${entry:.4f if entry < 10 else entry:.2f}</code> ➔ <b>Тек:</b> <code>${current_price:.4f if current_price < 10 else current_price:.2f}</code> (+1.5%)\n"
+                        f"🔒 <b>Новый Стоп-Лосс:</b> <code>${new_sl:.4f if new_sl < 10 else new_sl:.2f}</code> (гарантия нулевого риска)"
                     )
                     await notifier.send_message(be_msg, parse_mode="HTML")
                 elif side == "SELL" and current_price <= entry * 0.985:
@@ -104,8 +107,8 @@ class TrendStrategy:
         # Long-Only filter: Buy only on verified breakout above resistance with EMA trend confirmation
         if confirmed_close > highest_prev and ema_fast > ema_slow:
             signal = "BUY"
-            sl = round(current_price * (1.0 - self.stop_loss_pct), 2)
-            tp = round(current_price * (1.0 + self.take_profit_pct), 2)
+            sl = self.round_price(current_price * (1.0 - self.stop_loss_pct))
+            tp = self.round_price(current_price * (1.0 + self.take_profit_pct))
 
         if signal:
             trade_id = self.portfolio.open_position(
@@ -119,12 +122,15 @@ class TrendStrategy:
             )
             if trade_id:
                 side_emoji = "🚀 ЛОНГ" if signal == "BUY" else "🔻 ШОРТ"
+                p_fmt = f"${current_price:.4f}" if current_price < 10 else f"${current_price:.2f}"
+                sl_fmt = f"${sl:.4f}" if sl < 10 else f"${sl:.2f}"
+                tp_fmt = f"${tp:.4f}" if tp < 10 else f"${tp:.2f}"
                 alert = (
                     f"⚡ <b>[ТРЕНД 15m — ВХОД В ПОЗИЦИЮ]</b>\n"
                     f"🪙 <b>Пара:</b> <code>{symbol}</code> ({side_emoji})\n"
-                    f"💵 <b>Цена входа:</b> <code>${current_price:.2f}</code>\n"
-                    f"🛡 <b>Стоп-лосс:</b> <code>${sl:.2f}</code> (-1.5%)\n"
-                    f"🎯 <b>Тейк-профит:</b> <code>${tp:.2f}</code> (+3.5%)\n"
+                    f"💵 <b>Цена входа:</b> <code>{p_fmt}</code>\n"
+                    f"🛡 <b>Стоп-лосс:</b> <code>{sl_fmt}</code> (-2.0%)\n"
+                    f"🎯 <b>Тейк-профит:</b> <code>{tp_fmt}</code> (+6.0%)\n"
                     f"💰 <b>Банк стратегии:</b> <code>${self.portfolio.cash:.2f}</code>"
                 )
                 await notifier.send_message(alert, parse_mode="HTML")

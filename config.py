@@ -14,16 +14,21 @@ class Config:
     GRID_BUDGET: float = 100.0
     REVERSION_BUDGET: float = 100.0
 
+    SYMBOLS: list = ("BTC-USDT", "ETH-USDT", "SOL-USDT", "DOGE-USDT")
+    TIMEFRAME: str = "15m"
+
     SCAN_INTERVAL: int = 15  # Seconds between scan loops
     HEARTBEAT_INTERVAL: int = 300  # Tournament digest every 5 minutes
 
     # CS2 Skin Sniper Settings
     CS2_BOT_TOKEN: str = os.getenv("CS2_BOT_TOKEN", "8996410296:AAHNNPjvezKySwYd69C0NFFEr7pUE2BMIS0")
     CS2_BUDGET: float = 200.0
-    CS2_SCAN_INTERVAL: int = 60  # seconds between Skinport market catalog checks
-    CS2_MIN_DISCOUNT_PCT: float = 20.0  # minimum 20% discount below fair suggested price
-    CS2_MIN_PROFIT_PCT: float = 14.0    # minimum 14% net profit after fees
+    CS2_SCAN_INTERVAL: int = 300  # 5 minutes, matching Skinport CDN cache and avoiding 429 rate limit
+    CS2_MIN_DISCOUNT_PCT: float = 15.0  # minimum 15% discount below real average sales price
+    CS2_MIN_PROFIT_PCT: float = 8.0     # minimum 8% net profit after real 8% fees
     CS2_MIN_ITEM_PRICE: float = 4.0     # skip 5-cent graffiti
     CS2_MAX_ITEM_PRICE: float = 45.0    # keep diversified portfolio of items
+    CS2_MIN_SALES_LAST_30D: int = 10    # strict liquidity filter: at least 10 real sales in last 30 days
+    CS2_FEE_PCT: float = 0.08           # Skinport real standard seller fee (8%)
 
 config = Config()

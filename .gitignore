@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 .env
 portfolio_state.json
+cs2_portfolio_state.json
+*.csv
+*.tmp

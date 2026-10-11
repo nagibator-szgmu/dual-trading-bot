@@ -15,6 +15,9 @@ class FlashDumpHunterStrategy:
         self.stop_loss_pct = 0.020    # -2.0% SL
         self.take_profit_pct = 0.028   # +2.8% TP
 
+    def round_price(self, px: float) -> float:
+        return round(px, 4 if px < 10.0 else 2)
+
     def detect_liquidation_wick(self, candles: List[Dict[str, float]]):
         if len(candles) < 20:
             return False, 0.0
@@ -95,8 +98,8 @@ class FlashDumpHunterStrategy:
         # 3. Detect flash dump liquidation spike
         is_dump, drop_pct = self.detect_liquidation_wick(candles)
         if is_dump:
-            sl = round(current_price * (1.0 - self.stop_loss_pct), 2)
-            tp = round(current_price * (1.0 + self.take_profit_pct), 2)
+            sl = self.round_price(current_price * (1.0 - self.stop_loss_pct))
+            tp = self.round_price(current_price * (1.0 + self.take_profit_pct))
             trade_id = self.portfolio.open_position(
                 symbol=symbol,
                 side="BUY",
@@ -107,12 +110,15 @@ class FlashDumpHunterStrategy:
                 strategy_detail=f"Flash Dump Wick Rebound (-{drop_pct*100:.1f}%)"
             )
             if trade_id:
+                p_fmt = f"${current_price:.4f}" if current_price < 10 else f"${current_price:.2f}"
+                tp_fmt = f"${tp:.4f}" if tp < 10 else f"${tp:.2f}"
+                sl_fmt = f"${sl:.4f}" if sl < 10 else f"${sl:.2f}"
                 msg = (
                     f"🩸 <b>[ОХОТНИК ЗА СКВИЗАМИ — ВЫКУП ПРОЛИВА]</b>\n"
                     f"🪙 <b>Пара:</b> <code>{symbol}</code> (ЛОНГ на отскок)\n"
                     f"📉 <b>Пролив:</b> Импульсный слив на <code>{drop_pct*100:.1f}%</code> с выкупом фитиля\n"
-                    f"💵 <b>Цена входа:</b> <code>${current_price:.2f}</code> | Объем: $15\n"
-                    f"🎯 <b>Цель V-отскока:</b> <code>${tp:.2f}</code> (+2.8%) | 🛡 <b>SL:</b> <code>${sl:.2f}</code> (-2.0%)\n"
+                    f"💵 <b>Цена входа:</b> <code>{p_fmt}</code> | Объем: $15\n"
+                    f"🎯 <b>Цель V-отскока:</b> <code>{tp_fmt}</code> (+2.8%) | 🛡 <b>SL:</b> <code>{sl_fmt}</code> (-2.0%)\n"
                     f"💰 <b>Банк стратегии:</b> <code>${self.portfolio.cash:.2f}</code>"
                 )
                 await notifier.send_message(msg, parse_mode="HTML")

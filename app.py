@@ -198,6 +198,11 @@ async def telegram_command_listener():
                                 await notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
 
                             elif text in ["/export", "/csv", "/data", "/database", "/отчет", "экспорт"]:
+                                is_admin = (str(chat_id) == str(config.TELEGRAM_CHAT_ID))
+                                if not is_admin:
+                                    await notifier.send_message("⛔ Доступ ограничен. Выгрузка базы данных доступна только администратору.", chat_id=chat_id)
+                                    continue
+
                                 csv_file = tournament.export_csv("tournament_trades.csv")
                                 json_file = "portfolio_state.json"
                                 tournament.save()
@@ -347,6 +352,7 @@ def generate_cs2_dashboard_html():
             <td style="padding: 14px 18px;">${it['buy']:.2f}</td>
             <td style="padding: 14px 18px; color: #94a3b8;">${it['fair']:.2f}</td>
             <td style="padding: 14px 18px; color: #34d399; font-weight: 600;">-{it['disc']:.1f}%</td>
+            <td style="padding: 14px 18px; color: #38bdf8;">{it.get('vol_30', '—')} шт.</td>
             <td style="padding: 14px 18px; color: #34d399; font-weight: bold;">+${it['est_profit']:.2f}</td>
             <td style="padding: 14px 18px;"><span style="background: #1e3a8a; color: #93c5fd; padding: 4px 10px; border-radius: 6px; font-size: 12px;">🔒 ~{it['days_left']} дн.</span></td>
         </tr>
@@ -355,8 +361,8 @@ def generate_cs2_dashboard_html():
     if not items:
         rows_html = """
         <tr>
-            <td colspan="6" style="padding: 24px; text-align: center; color: #94a3b8;">
-                Инвентарь сканируется. Бот отбирает скидки >20% на Skinport.
+            <td colspan="7" style="padding: 24px; text-align: center; color: #94a3b8;">
+                Инвентарь сканируется. Бот отбирает ликвидные скидки >15% на Skinport.
             </td>
         </tr>
         """
@@ -400,6 +406,7 @@ def generate_cs2_dashboard_html():
                     <th style="padding: 14px 18px;">Цена покупки</th>
                     <th style="padding: 14px 18px;">Fair Price</th>
                     <th style="padding: 14px 18px;">Скидка</th>
+                    <th style="padding: 14px 18px;">Объем (30д)</th>
                     <th style="padding: 14px 18px;">Профит</th>
                     <th style="padding: 14px 18px;">Блокировка</th>
                 </tr>
@@ -517,23 +524,34 @@ async def cs2_telegram_command_listener():
                                 await cs2_notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
 
                             elif text in ["/scan", "скан", "поиск"]:
+                                is_admin = (str(chat_id) == str(config.TELEGRAM_CHAT_ID))
+                                if not is_admin:
+                                    await cs2_notifier.send_message("⛔ Ручной запуск сканирования доступен только администратору для защиты от rate-limit.", chat_id=chat_id)
+                                    continue
+
                                 loop = asyncio.get_running_loop()
                                 top = await loop.run_in_executor(None, cs2_sniper.get_top_discounts, 5)
                                 if not top:
-                                    reply = "🔍 Сканирование завершено. Аномальных скидок >20% в эту секунду не обнаружено."
+                                    reply = "🔍 Сканирование завершено. Ликвидных скидок >15% в эту секунду не обнаружено."
                                 else:
-                                    lines = ["🔥 <b>ТОП-5 АНОМАЛЬНЫХ ДИСКОНТОВ НА SKINPORT ПРЯМО СЕЙЧАС:</b>\n"]
+                                    lines = ["🔥 <b>ТОП-5 ЛИКВИДНЫХ ДИСКОНТОВ НА SKINPORT ПРЯМО СЕЙЧАС:</b>\n"]
                                     for c in top:
                                         lines.append(
                                             f"• <b>{html.escape(c['name'])}</b>\n"
-                                            f"  🏷 Выставлен за: <b>${c['min_price']:.2f}</b> (Fair: ${c['suggested_price']:.2f})\n"
-                                            f"  📉 Скидка: <b>-{c['discount_pct']:.1f}%</b> | Профит: <b>+{c['net_pct']:.1f}%</b> (+${c['net_profit']:.2f})\n"
+                                            f"  🏷 Выставлен за: <b>${c['min_price']:.2f}</b> (Fair: ${c['fair_price']:.2f})\n"
+                                            f"  📉 Скидка: <b>-{c['discount_pct']:.1f}%</b> | Объем (30д): <b>{c['vol_30']} шт.</b>\n"
+                                            f"  💰 Чистый профит (после 8%): <b>+{c['net_pct']:.1f}%</b> (+${c['net_profit']:.2f})\n"
                                             f"  📦 Наличие: {c['quantity']} шт. | <a href='{c['url']}'>Ссылка на Skinport</a>\n"
                                         )
                                     reply = "\n".join(lines)
                                 await cs2_notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
 
                             elif text in ["/export", "экспорт", "csv"]:
+                                is_admin = (str(chat_id) == str(config.TELEGRAM_CHAT_ID))
+                                if not is_admin:
+                                    await cs2_notifier.send_message("⛔ Экспорт базы данных доступен только администратору.", chat_id=chat_id)
+                                    continue
+
                                 csv_path = cs2_sniper.export_csv("cs2_trades.csv")
                                 await cs2_notifier.send_document(csv_path, chat_id=chat_id, caption="📊 <code>cs2_trades.csv</code> — плоская таблица сделок по CS2 скинам.")
 

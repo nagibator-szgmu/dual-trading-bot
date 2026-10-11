@@ -14,6 +14,9 @@ class MeanReversionStrategy:
         self.position_size = 15.0
         self.stop_loss_pct = 0.018
 
+    def round_price(self, px: float) -> float:
+        return round(px, 4 if px < 10.0 else 2)
+
     def calculate_rsi(self, closes: List[float], period: int = 14) -> float:
         if len(closes) < period + 1:
             return 50.0
@@ -116,11 +119,10 @@ class MeanReversionStrategy:
         if self.portfolio.cash < self.position_size:
             return
 
-        # 3. Entry conditions
-        # Extreme Oversold: RSI < 30 and price <= lower BB -> Bounce BUY
+        # 3. Entry conditions: Long-Only Oversold Bounce on Spot (avoid unhedged spot shorts)
         if rsi < 32 and current_price <= lower_bb * 1.002:
-            sl = round(current_price * (1.0 - self.stop_loss_pct), 2)
-            tp = round(max(sma, current_price * 1.015), 2)
+            sl = self.round_price(current_price * (1.0 - self.stop_loss_pct))
+            tp = self.round_price(max(sma, current_price * 1.015))
             trade_id = self.portfolio.open_position(
                 symbol=symbol,
                 side="BUY",
@@ -131,36 +133,15 @@ class MeanReversionStrategy:
                 strategy_detail=f"Oversold Bounce (RSI={rsi:.1f})"
             )
             if trade_id:
+                p_fmt = f"${current_price:.4f}" if current_price < 10 else f"${current_price:.2f}"
+                tp_fmt = f"${tp:.4f}" if tp < 10 else f"${tp:.2f}"
+                sl_fmt = f"${sl:.4f}" if sl < 10 else f"${sl:.2f}"
                 msg = (
                     f"🧲 <b>[RSI ОТСКОК — ВХОД В ЛОНГ]</b>\n"
                     f"🪙 <b>Пара:</b> <code>{symbol}</code> (ЛОНГ)\n"
                     f"📉 <b>Индикатор:</b> RSI = <code>{rsi:.1f}</code> (Перепроданность)\n"
-                    f"💵 <b>Цена входа:</b> <code>${current_price:.2f}</code>\n"
-                    f"🎯 <b>Цель (средняя):</b> <code>${tp:.2f}</code> | SL: <code>${sl:.2f}</code>\n"
-                    f"💰 <b>Банк:</b> <code>${self.portfolio.cash:.2f}</code>"
-                )
-                await notifier.send_message(msg, parse_mode="HTML")
-
-        # Extreme Overbought: RSI > 68 and price >= upper BB -> Reversal SELL
-        elif rsi > 68 and current_price >= upper_bb * 0.998:
-            sl = round(current_price * (1.0 + self.stop_loss_pct), 2)
-            tp = round(min(sma, current_price * 0.985), 2)
-            trade_id = self.portfolio.open_position(
-                symbol=symbol,
-                side="SELL",
-                price=current_price,
-                amount_usd=self.position_size,
-                stop_loss=sl,
-                take_profit=tp,
-                strategy_detail=f"Overbought Reversal (RSI={rsi:.1f})"
-            )
-            if trade_id:
-                msg = (
-                    f"🧲 <b>[RSI ОТСКОК — ВХОД В ШОРТ]</b>\n"
-                    f"🪙 <b>Пара:</b> <code>{symbol}</code> (ШОРТ)\n"
-                    f"📈 <b>Индикатор:</b> RSI = <code>{rsi:.1f}</code> (Перекупленность)\n"
-                    f"💵 <b>Цена входа:</b> <code>${current_price:.2f}</code>\n"
-                    f"🎯 <b>Цель (средняя):</b> <code>${tp:.2f}</code> | SL: <code>${sl:.2f}</code>\n"
+                    f"💵 <b>Цена входа:</b> <code>{p_fmt}</code>\n"
+                    f"🎯 <b>Цель (средняя):</b> <code>{tp_fmt}</code> | SL: <code>{sl_fmt}</code>\n"
                     f"💰 <b>Банк:</b> <code>${self.portfolio.cash:.2f}</code>"
                 )
                 await notifier.send_message(msg, parse_mode="HTML")

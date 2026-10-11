@@ -15,6 +15,9 @@ class VolatilitySqueezeStrategy:
         self.stop_loss_pct = 0.018    # -1.8% SL
         self.take_profit_pct = 0.055   # +5.5% TP (R:R 1:3)
 
+    def round_price(self, px: float) -> float:
+        return round(px, 4 if px < 10.0 else 2)
+
     def calculate_indicators(self, candles: List[Dict[str, float]]):
         if len(candles) < 25:
             return None
@@ -78,15 +81,18 @@ class VolatilitySqueezeStrategy:
 
             # Breakeven Trailing: when profit reaches +1.5%, lock SL at entry + 0.2%
             if not pos.get("breakeven") and current_price >= entry * 1.015:
-                new_sl = round(entry * 1.002, 2)
+                new_sl = self.round_price(entry * 1.002)
                 pos["stop_loss"] = new_sl
                 pos["breakeven"] = True
                 sl = new_sl
+                p_fmt = f"${entry:.4f}" if entry < 10 else f"${entry:.2f}"
+                cur_fmt = f"${current_price:.4f}" if current_price < 10 else f"${current_price:.2f}"
+                sl_fmt = f"${new_sl:.4f}" if new_sl < 10 else f"${new_sl:.2f}"
                 be_msg = (
                     f"🛡 <b>[КВАНТОВАЯ ПРУЖИНА — ПЕРЕВОД В БЕЗУБЫТОК]</b>\n"
                     f"🪙 <b>Пара:</b> <code>{symbol}</code> (BUY)\n"
-                    f"🎯 <b>Вход:</b> <code>${entry:.2f}</code> ➔ <b>Тек:</b> <code>${current_price:.2f}</code> (+1.5%)\n"
-                    f"🔒 <b>Новый Стоп-Лосс:</b> <code>${new_sl:.2f}</code> (гарантия нулевого риска)"
+                    f"🎯 <b>Вход:</b> <code>{p_fmt}</code> ➔ <b>Тек:</b> <code>{cur_fmt}</code> (+1.5%)\n"
+                    f"🔒 <b>Новый Стоп-Лосс:</b> <code>{sl_fmt}</code> (гарантия нулевого риска)"
                 )
                 await notifier.send_message(be_msg, parse_mode="HTML")
 
@@ -139,10 +145,10 @@ class VolatilitySqueezeStrategy:
         highest_prev = max(c["high"] for c in closed_bars[-20:])
         confirmed_close = closed_bars[-1]["close"]
 
-        # If previous bar was squeezed and confirmed close breaks above resistance with volume
-        if confirmed_close > highest_prev * 0.999 and current_price > ind["upper_bb"]:
-            sl = round(current_price * (1.0 - self.stop_loss_pct), 2)
-            tp = round(current_price * (1.0 + self.take_profit_pct), 2)
+        # Validated Squeeze Breakout: volatility was squeezed or volume confirmed breakout above BB
+        if (ind["is_squeezed"] or ind["vol_confirmed"]) and confirmed_close > highest_prev * 0.999 and current_price > ind["upper_bb"]:
+            sl = self.round_price(current_price * (1.0 - self.stop_loss_pct))
+            tp = self.round_price(current_price * (1.0 + self.take_profit_pct))
             
             trade_id = self.portfolio.open_position(
                 symbol=symbol,
@@ -154,12 +160,15 @@ class VolatilitySqueezeStrategy:
                 strategy_detail=f"Squeeze Breakout (ATR={ind['atr14']:.2f})"
             )
             if trade_id:
+                p_fmt = f"${current_price:.4f}" if current_price < 10 else f"${current_price:.2f}"
+                tp_fmt = f"${tp:.4f}" if tp < 10 else f"${tp:.2f}"
+                sl_fmt = f"${sl:.4f}" if sl < 10 else f"${sl:.2f}"
                 msg = (
                     f"💥 <b>[КВАНТОВАЯ ПРУЖИНА — ВЫХОД ИЗ СЖАТИЯ]</b>\n"
                     f"🪙 <b>Пара:</b> <code>{symbol}</code> (ЛОНГ)\n"
                     f"⚡ <b>Паттерн:</b> Разжатие полос Боллинджера / Пробой канала\n"
-                    f"💵 <b>Вход:</b> <code>${current_price:.2f}</code>\n"
-                    f"🎯 <b>Тейк-профит:</b> <code>${tp:.2f}</code> (+5.5%) | 🛡 <b>SL:</b> <code>${sl:.2f}</code> (-1.8%)\n"
+                    f"💵 <b>Вход:</b> <code>{p_fmt}</code>\n"
+                    f"🎯 <b>Тейк-профит:</b> <code>{tp_fmt}</code> (+5.5%) | 🛡 <b>SL:</b> <code>{sl_fmt}</code> (-1.8%)\n"
                     f"💰 <b>Банк стратегии:</b> <code>${self.portfolio.cash:.2f}</code>"
                 )
                 await notifier.send_message(msg, parse_mode="HTML")

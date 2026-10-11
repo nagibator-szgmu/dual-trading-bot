@@ -51,9 +51,11 @@ class CS2TelegramNotifier:
             if caption:
                 data.add_field("caption", caption)
                 data.add_field("parse_mode", "HTML")
+            with open(file_path, "rb") as f:
+                file_bytes = f.read()
             data.add_field(
                 "document",
-                open(file_path, "rb"),
+                file_bytes,
                 filename=os.path.basename(file_path)
             )
             async with aiohttp.ClientSession() as session:

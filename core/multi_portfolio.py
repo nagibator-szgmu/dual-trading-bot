@@ -89,8 +89,8 @@ class StrategyPortfolio:
         else:
             pct = (entry - exit_price) / entry
 
-        # Realistic fee model: Grid uses limit Maker (0.02%), Trend/Reversion use market Taker (0.05% + 0.05% slippage)
-        fee_rate = 0.0002 if self.code == "grid" else 0.0010
+        # Realistic fee model: Grid strategies use limit Maker (0.02%), Trend/Reversion use market Taker (0.05% + 0.05% slippage)
+        fee_rate = 0.0002 if self.code in ["grid", "adaptive_grid"] else 0.0010
         net_pct = pct - (2 * fee_rate)
         pnl = amt * net_pct
         return_amt = max(0.0, amt + pnl)

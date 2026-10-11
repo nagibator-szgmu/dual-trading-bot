@@ -66,7 +66,7 @@ class HyperCascadeSniperStrategy:
                 if self.portfolio.add_to_position(pid, current_price, self.stage2_size):
                     pos["stage"] = 2
                     stage = 2
-                    new_sl = round(pos["entry"] * 1.002, 4)
+                    new_sl = round(pos["entry"] * 1.0035, 4)
                     pos["stop_loss"] = new_sl
                     sl = new_sl
                     msg = (
@@ -75,7 +75,7 @@ class HyperCascadeSniperStrategy:
                         f"📈 <b>Импульс подтвержден:</b> +1.8% хода цены!\n"
                         f"💰 <b>Добавлено в позицию:</b> +${self.stage2_size:.2f} (Всего: ${pos['amount']:.2f})\n"
                         f"🎯 <b>Новая средняя цена:</b> <code>${pos['entry']:.4f}</code>\n"
-                        f"🛡 <b>Стоп-лосс перенесен в безубыток:</b> <code>${new_sl:.4f}</code> (РИСК = $0.00)"
+                        f"🛡 <b>Стоп-лосс в чистом безубытке (с комиссиями):</b> <code>${new_sl:.4f}</code> (+0.35%)"
                     )
                     await notifier.send_message(msg, parse_mode="HTML")
 
