@@ -1,0 +1,146 @@
+{
+  "initial": 200.0,
+  "cash": 141.39,
+  "inventory": {
+    "cs2_145807_1791726088": {
+      "id": "cs2_145807_1791726088",
+      "name": "Sticker Slab | nitr0 (Embroidered) | Budapest 2025",
+      "buy_price": 4.52,
+      "fair_price": 6.9,
+      "discount_pct": 34.5,
+      "est_profit": 2.04,
+      "est_profit_pct": 45.0,
+      "quantity_market": 2,
+      "url": "https://skinport.com/item/sticker-slab-nitr0-embroidered-budapest-2025",
+      "bought_at": "2026-10-11 16:41:32",
+      "bought_at_ts": 1791726088.6460412,
+      "trade_lock_until": 1792330888.6460412
+    },
+    "cs2_177288_1791726088": {
+      "id": "cs2_177288_1791726088",
+      "name": "Sticker | sh1ro (Gold) | Rio 2022",
+      "buy_price": 11.72,
+      "fair_price": 17.28,
+      "discount_pct": 32.2,
+      "est_profit": 4.7,
+      "est_profit_pct": 40.1,
+      "quantity_market": 5,
+      "url": "https://skinport.com/item/sticker-sh1ro-gold-rio-2022",
+      "bought_at": "2026-10-11 16:41:32",
+      "bought_at_ts": 1791726088.6460412,
+      "trade_lock_until": 1792330888.6460412
+    },
+    "cs2_704477_1791726088": {
+      "id": "cs2_704477_1791726088",
+      "name": "XM1014 | Banana Leaf (Minimal Wear)",
+      "buy_price": 8.88,
+      "fair_price": 12.84,
+      "discount_pct": 30.8,
+      "est_profit": 3.32,
+      "est_profit_pct": 37.4,
+      "quantity_market": 23,
+      "url": "https://skinport.com/item/xm1014-banana-leaf-minimal-wear",
+      "bought_at": "2026-10-11 16:41:32",
+      "bought_at_ts": 1791726088.6460412,
+      "trade_lock_until": 1792330888.6460412
+    },
+    "cs2_953810_1791726088": {
+      "id": "cs2_953810_1791726088",
+      "name": "Souvenir MP9 | Setting Sun (Field-Tested)",
+      "buy_price": 10.2,
+      "fair_price": 14.64,
+      "discount_pct": 30.3,
+      "est_profit": 3.71,
+      "est_profit_pct": 36.4,
+      "quantity_market": 9,
+      "url": "https://skinport.com/item/souvenir-mp9-setting-sun-field-tested",
+      "bought_at": "2026-10-11 16:41:32",
+      "bought_at_ts": 1791726088.6460412,
+      "trade_lock_until": 1792330888.6460412
+    },
+    "cs2_405644_1791726088": {
+      "id": "cs2_405644_1791726088",
+      "name": "M249 | Contrast Spray (Battle-Scarred)",
+      "buy_price": 7.93,
+      "fair_price": 11.38,
+      "discount_pct": 30.3,
+      "est_profit": 2.88,
+      "est_profit_pct": 36.3,
+      "quantity_market": 3,
+      "url": "https://skinport.com/item/m249-contrast-spray-battle-scarred",
+      "bought_at": "2026-10-11 16:41:32",
+      "bought_at_ts": 1791726088.6460412,
+      "trade_lock_until": 1792330888.6460412
+    },
+    "cs2_589583_1791726088": {
+      "id": "cs2_589583_1791726088",
+      "name": "Sticker | GuardiaN (Foil) | Boston 2018",
+      "buy_price": 15.36,
+      "fair_price": 21.35,
+      "discount_pct": 28.1,
+      "est_profit": 4.92,
+      "est_profit_pct": 32.0,
+      "quantity_market": 3,
+      "url": "https://skinport.com/item/sticker-guardian-foil-boston-2018",
+      "bought_at": "2026-10-11 16:41:32",
+      "bought_at_ts": 1791726088.6460412,
+      "trade_lock_until": 1792330888.6460412
+    }
+  },
+  "history": [
+    {
+      "action": "BUY",
+      "trade_id": "cs2_145807_1791726088",
+      "name": "Sticker Slab | nitr0 (Embroidered) | Budapest 2025",
+      "buy_price": 4.52,
+      "fair_price": 6.9,
+      "discount_pct": 34.5,
+      "time": "2026-10-11 16:41:32"
+    },
+    {
+      "action": "BUY",
+      "trade_id": "cs2_177288_1791726088",
+      "name": "Sticker | sh1ro (Gold) | Rio 2022",
+      "buy_price": 11.72,
+      "fair_price": 17.28,
+      "discount_pct": 32.2,
+      "time": "2026-10-11 16:41:32"
+    },
+    {
+      "action": "BUY",
+      "trade_id": "cs2_704477_1791726088",
+      "name": "XM1014 | Banana Leaf (Minimal Wear)",
+      "buy_price": 8.88,
+      "fair_price": 12.84,
+      "discount_pct": 30.8,
+      "time": "2026-10-11 16:41:32"
+    },
+    {
+      "action": "BUY",
+      "trade_id": "cs2_953810_1791726088",
+      "name": "Souvenir MP9 | Setting Sun (Field-Tested)",
+      "buy_price": 10.2,
+      "fair_price": 14.64,
+      "discount_pct": 30.3,
+      "time": "2026-10-11 16:41:32"
+    },
+    {
+      "action": "BUY",
+      "trade_id": "cs2_405644_1791726088",
+      "name": "M249 | Contrast Spray (Battle-Scarred)",
+      "buy_price": 7.93,
+      "fair_price": 11.38,
+      "discount_pct": 30.3,
+      "time": "2026-10-11 16:41:32"
+    },
+    {
+      "action": "BUY",
+      "trade_id": "cs2_589583_1791726088",
+      "name": "Sticker | GuardiaN (Foil) | Boston 2018",
+      "buy_price": 15.36,
+      "fair_price": 21.35,
+      "discount_pct": 28.1,
+      "time": "2026-10-11 16:41:32"
+    }
+  ]
+}

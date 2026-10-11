@@ -17,6 +17,8 @@ from strategies.squeeze_strategy import VolatilitySqueezeStrategy
 from strategies.adaptive_grid_strategy import AdaptiveGridStrategy
 from strategies.dump_hunter_strategy import FlashDumpHunterStrategy
 from strategies.hyper_cascade_strategy import HyperCascadeSniperStrategy
+from core.cs2_notifier import cs2_notifier
+from core.cs2_sniper import cs2_sniper
 
 try:
     import spaces
@@ -333,6 +335,223 @@ def generate_dashboard_html():
     """
     return html_content
 
+def generate_cs2_dashboard_html():
+    sm = cs2_sniper.get_summary()
+    items = sm.get("items", [])
+    
+    rows_html = ""
+    for it in items:
+        rows_html += f"""
+        <tr style="border-bottom: 1px solid #334155;">
+            <td style="padding: 14px 18px; font-weight: 600;"><a href="{it['url']}" target="_blank" style="color: #38bdf8; text-decoration: none;">{html.escape(it['name'])}</a></td>
+            <td style="padding: 14px 18px;">${it['buy']:.2f}</td>
+            <td style="padding: 14px 18px; color: #94a3b8;">${it['fair']:.2f}</td>
+            <td style="padding: 14px 18px; color: #34d399; font-weight: 600;">-{it['disc']:.1f}%</td>
+            <td style="padding: 14px 18px; color: #34d399; font-weight: bold;">+${it['est_profit']:.2f}</td>
+            <td style="padding: 14px 18px;"><span style="background: #1e3a8a; color: #93c5fd; padding: 4px 10px; border-radius: 6px; font-size: 12px;">🔒 ~{it['days_left']} дн.</span></td>
+        </tr>
+        """
+        
+    if not items:
+        rows_html = """
+        <tr>
+            <td colspan="6" style="padding: 24px; text-align: center; color: #94a3b8;">
+                Инвентарь сканируется. Бот отбирает скидки >20% на Skinport.
+            </td>
+        </tr>
+        """
+
+    pnl_color = "#34d399" if sm['total_pnl'] >= 0 else "#f87171"
+    pnl_sign = "+" if sm['total_pnl'] >= 0 else ""
+
+    html_content = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 24px; border-radius: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 16px; margin-bottom: 24px;">
+            <h1 style="margin: 0; font-size: 24px; color: #f8fafc;">🔫 CS2 Skin Paper Sniper</h1>
+            <span style="background: #1e3a8a; color: #60a5fa; padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;">● Skinport Live Engine</span>
+        </div>
+
+        <div style="background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 24px; display: flex; gap: 32px; flex-wrap: wrap;">
+            <div>
+                <div style="color: #94a3b8; font-size: 13px; margin-bottom: 6px;">Общий Капитал</div>
+                <div style="font-size: 26px; font-weight: bold; color: #f8fafc;">${sm['equity']:.2f}</div>
+            </div>
+            <div>
+                <div style="color: #94a3b8; font-size: 13px; margin-bottom: 6px;">Свободный Кэш</div>
+                <div style="font-size: 26px; font-weight: bold; color: #38bdf8;">${sm['cash']:.2f}</div>
+            </div>
+            <div>
+                <div style="color: #94a3b8; font-size: 13px; margin-bottom: 6px;">Вложено в Скины</div>
+                <div style="font-size: 26px; font-weight: bold; color: #f8fafc;">${sm['invested']:.2f} <span style="font-size: 14px; color: #94a3b8;">({sm['inventory_count']} шт.)</span></div>
+            </div>
+            <div>
+                <div style="color: #94a3b8; font-size: 13px; margin-bottom: 6px;">Расчетный PnL</div>
+                <div style="font-size: 26px; font-weight: bold; color: {pnl_color};">
+                    {pnl_sign}${sm['total_pnl']:.2f} ({pnl_sign}{sm['total_pnl_pct']:.2f}%)
+                </div>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 0; margin-bottom: 14px; font-size: 16px; color: #cbd5e1;">🎒 Текущий Инвентарь (Trade Lock):</h3>
+        <table style="width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 12px; overflow: hidden;">
+            <thead>
+                <tr style="background: #090d16; color: #94a3b8; font-size: 13px; text-align: left;">
+                    <th style="padding: 14px 18px;">Предмет</th>
+                    <th style="padding: 14px 18px;">Цена покупки</th>
+                    <th style="padding: 14px 18px;">Fair Price</th>
+                    <th style="padding: 14px 18px;">Скидка</th>
+                    <th style="padding: 14px 18px;">Профит</th>
+                    <th style="padding: 14px 18px;">Блокировка</th>
+                </tr>
+            </thead>
+            <tbody>
+                {rows_html}
+            </tbody>
+        </table>
+
+        <div style="margin-top: 24px; text-align: center; color: #94a3b8; font-size: 13px;">
+            Управление CS2 ботом: <a href="https://t.me/css33_bot" target="_blank" style="color: #38bdf8; text-decoration: none; font-weight: 600;">Telegram @css33_bot</a> | Команды: /status, /inventory, /scan, /export
+        </div>
+    </div>
+    """
+    return html_content
+
+async def cs2_sniper_loop():
+    logger.info("CS2 Skin Paper Sniper запущен (интервал %d сек)...", config.CS2_SCAN_INTERVAL)
+    while is_running:
+        try:
+            loop = asyncio.get_running_loop()
+            res = await loop.run_in_executor(None, cs2_sniper.scan_and_snipe)
+            
+            for item in res.get("sniped", []):
+                msg = (
+                    f"🎯 <b>[CS2 СНАЙПЕР — ВЫКУПЛЕН СКИДКА {item['discount_pct']:.1f}%]</b>\n\n"
+                    f"🔫 <b>Предмет:</b> <code>{html.escape(item['name'])}</code>\n"
+                    f"💵 <b>Цена выкупа:</b> <code>${item['buy_price']:.2f}</code>\n"
+                    f"📊 <b>Справедливая цена:</b> <code>${item['fair_price']:.2f}</code>\n"
+                    f"💰 <b>Расчетный профит:</b> <code>+${item['est_profit']:.2f}</code> (<code>+{item['est_profit_pct']:.1f}%</code>)\n"
+                    f"🔒 <b>Trade Lock:</b> <code>7 дней</code>\n"
+                    f"💼 <b>Свободный кэш:</b> <code>${cs2_sniper.cash:.2f}</code>\n"
+                    f"🔗 <a href='{item.get('url', 'https://skinport.com')}'>Открыть лот на Skinport</a>"
+                )
+                await cs2_notifier.send_message(msg, parse_mode="HTML")
+
+            for s in res.get("sold", []):
+                msg = (
+                    f"💰 <b>[CS2 СНАЙПЕР — ПРОДАН ПРЕДМЕТ]</b>\n\n"
+                    f"🔫 <b>Предмет:</b> <code>{html.escape(s['name'])}</code>\n"
+                    f"💵 <b>Вход:</b> <code>${s['buy_price']:.2f}</code> ➔ <b>Продано:</b> <code>${s['net_sale']:.2f}</code>\n"
+                    f"📈 <b>Чистая прибыль:</b> <code>+{s['profit']:.2f}$</code> (<code>+{s['profit_pct']:+.1f}%</code>)\n"
+                    f"💼 <b>Баланс CS2 банка:</b> <code>${cs2_sniper.cash:.2f}</code>"
+                )
+                await cs2_notifier.send_message(msg, parse_mode="HTML")
+
+        except Exception as e:
+            logger.error(f"Ошибка в cs2_sniper_loop: {e}")
+
+        await asyncio.sleep(config.CS2_SCAN_INTERVAL)
+
+async def cs2_telegram_command_listener():
+    import aiohttp
+    last_update_id = 0
+    token = config.CS2_BOT_TOKEN
+    if not token:
+        return
+
+    while is_running:
+        try:
+            url = f"https://api.telegram.org/bot{token}/getUpdates?offset={last_update_id + 1}&timeout=10"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        for update in data.get("result", []):
+                            last_update_id = update["update_id"]
+                            msg = update.get("message", {})
+                            text = (msg.get("text", "")).strip().lower()
+                            chat_id = str(msg.get("chat", {}).get("id", ""))
+
+                            if text in ["/start", "старт"]:
+                                reply = (
+                                    "👋 <b>Добро пожаловать в CS2 Skin Paper Sniper!</b>\n\n"
+                                    "🔫 <i>Автономный бот 24/7 для снайпинга недооцененных скинов, демпинга и аномальных скидок на Skinport и Steam Market.</i>\n\n"
+                                    "💰 <b>Виртуальный депозит:</b> $200.00\n"
+                                    "🎯 <b>Критерии поиска:</b> дисконт от 20% к справедливой цене, чистый профит от 14% с учетом комиссий.\n\n"
+                                    "📊 <b>Команды:</b>\n"
+                                    "• /status — баланс, PnL и сводка по инвентарю\n"
+                                    "• /inventory или /items — список удерживаемых скинов и Trade Lock\n"
+                                    "• /scan — мгновенный поиск топ-скидок на рынке прямо сейчас\n"
+                                    "• /export — выгрузить базу сделок (CSV)\n"
+                                    "• /help — справка"
+                                )
+                                await cs2_notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
+
+                            elif text in ["/status", "/balance", "баланс"]:
+                                sm = cs2_sniper.get_summary()
+                                reply = (
+                                    "🔫 <b>CS2 SKIN SNIPER — СТАТУС ИНВЕНТАРЯ</b>\n\n"
+                                    f"💰 <b>Общий капитал:</b> ${sm['equity']:.2f}\n"
+                                    f"💵 <b>Свободный кэш:</b> ${sm['cash']:.2f}\n"
+                                    f"🎒 <b>Вложено в скины:</b> ${sm['invested']:.2f} ({sm['inventory_count']} шт.)\n"
+                                    f"📈 <b>Нереализованный PnL:</b> {'+' if sm['unrealized_profit'] >= 0 else ''}${sm['unrealized_profit']:.2f}\n"
+                                    f"📊 <b>Суммарный PnL:</b> {'+' if sm['total_pnl'] >= 0 else ''}${sm['total_pnl']:.2f} ({sm['total_pnl_pct']:+.2f}%)\n"
+                                    f"🏆 <b>Успешных продаж:</b> {sm['sold_count']} шт. (Винрейт: {sm['win_rate']:.1f}%)\n\n"
+                                    "Команды: /inventory, /scan, /export"
+                                )
+                                await cs2_notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
+
+                            elif text in ["/inventory", "/items", "инвентарь", "скины"]:
+                                sm = cs2_sniper.get_summary()
+                                items = sm.get("items", [])
+                                if not items:
+                                    reply = "📭 <b>Инвентарь пуст.</b> Бот сканирует рынок на предмет скидок от 20%."
+                                else:
+                                    lines = ["🎒 <b>СКИHЫ В ИНВЕНТАРЕ (TRADE LOCK):</b>\n"]
+                                    for it in items:
+                                        lines.append(
+                                            f"• <b>{html.escape(it['name'])}</b>\n"
+                                            f"  💵 Куплено: ${it['buy']:.2f} ➔ Оценка: ${it['fair']:.2f} (-{it['disc']}%) | Профит: +${it['est_profit']:.2f}\n"
+                                            f"  🔒 Trade Lock: осталось ~{it['days_left']} дн.\n"
+                                        )
+                                    reply = "\n".join(lines)
+                                await cs2_notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
+
+                            elif text in ["/scan", "скан", "поиск"]:
+                                loop = asyncio.get_running_loop()
+                                top = await loop.run_in_executor(None, cs2_sniper.get_top_discounts, 5)
+                                if not top:
+                                    reply = "🔍 Сканирование завершено. Аномальных скидок >20% в эту секунду не обнаружено."
+                                else:
+                                    lines = ["🔥 <b>ТОП-5 АНОМАЛЬНЫХ ДИСКОНТОВ НА SKINPORT ПРЯМО СЕЙЧАС:</b>\n"]
+                                    for c in top:
+                                        lines.append(
+                                            f"• <b>{html.escape(c['name'])}</b>\n"
+                                            f"  🏷 Выставлен за: <b>${c['min_price']:.2f}</b> (Fair: ${c['suggested_price']:.2f})\n"
+                                            f"  📉 Скидка: <b>-{c['discount_pct']:.1f}%</b> | Профит: <b>+{c['net_pct']:.1f}%</b> (+${c['net_profit']:.2f})\n"
+                                            f"  📦 Наличие: {c['quantity']} шт. | <a href='{c['url']}'>Ссылка на Skinport</a>\n"
+                                        )
+                                    reply = "\n".join(lines)
+                                await cs2_notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
+
+                            elif text in ["/export", "экспорт", "csv"]:
+                                csv_path = cs2_sniper.export_csv("cs2_trades.csv")
+                                await cs2_notifier.send_document(csv_path, chat_id=chat_id, caption="📊 <code>cs2_trades.csv</code> — плоская таблица сделок по CS2 скинам.")
+
+                            elif text in ["/help", "помощь"]:
+                                reply = (
+                                    "ℹ️ <b>Команды CS2 Снайпера:</b>\n"
+                                    "• /status — баланс и профит\n"
+                                    "• /inventory — инвентарь и статус Trade Lock\n"
+                                    "• /scan — живой поиск топ-дисконтов на Skinport\n"
+                                    "• /export — скачать CSV\n"
+                                    "• /help — эта справка"
+                                )
+                                await cs2_notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
+
+        except Exception as e:
+            logger.debug(f"CS2 Command listener error: {e}")
+            await asyncio.sleep(2)
+
 def run_async_services():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -340,18 +559,26 @@ def run_async_services():
         asyncio.gather(
             market_loop(),
             telegram_command_listener(),
-            heartbeat_loop()
+            heartbeat_loop(),
+            cs2_sniper_loop(),
+            cs2_telegram_command_listener()
         )
     )
 
-with gr.Blocks(title="🏆 Crypto Algorithmic Tournament Bot") as demo:
-    dashboard_ui = gr.HTML(value=generate_dashboard_html)
+with gr.Blocks(title="🏆 Crypto & CS2 Quant Trading Platform") as demo:
+    with gr.Tabs():
+        with gr.Tab("🏆 Крипто-Турнир (7 Стратегий)"):
+            crypto_ui = gr.HTML(value=generate_dashboard_html)
+        with gr.Tab("🔫 CS2 Skin Sniper ($200 Инвентарь)"):
+            cs2_ui = gr.HTML(value=generate_cs2_dashboard_html)
+            
     timer = gr.Timer(5)
-    timer.tick(fn=generate_dashboard_html, outputs=dashboard_ui)
+    timer.tick(fn=generate_dashboard_html, outputs=crypto_ui)
+    timer.tick(fn=generate_cs2_dashboard_html, outputs=cs2_ui)
 
 if __name__ == "__main__":
     t = threading.Thread(target=run_async_services, daemon=True)
     t.start()
     port = int(os.getenv("PORT", "7860"))
-    logger.info(f"Запуск Gradio турнирного дашборда на порту {port}...")
+    logger.info(f"Запуск Gradio платформы на порту {port}...")
     demo.launch(server_name="0.0.0.0", server_port=port)
