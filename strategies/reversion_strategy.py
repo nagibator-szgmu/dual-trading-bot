@@ -71,13 +71,13 @@ class MeanReversionStrategy:
             if side == "BUY":
                 if sl and current_price <= sl:
                     to_close.append((pid, current_price, "Стоп-лосс (-1.8%)"))
-                elif current_price >= sma:  # Target hit: returned to mean!
-                    to_close.append((pid, current_price, "Возврат к средней SMA20 (Тейк-профит)"))
+                elif current_price >= tp and current_price >= entry * 1.015:  # Target hit and covers fees!
+                    to_close.append((pid, current_price, f"Тейк-профит к средней (+{(current_price-entry)/entry*100:.1f}%)"))
             elif side == "SELL":
                 if sl and current_price >= sl:
                     to_close.append((pid, current_price, "Стоп-лосс (-1.8%)"))
-                elif current_price <= sma:  # Target hit: returned to mean!
-                    to_close.append((pid, current_price, "Возврат к средней SMA20 (Тейк-профит)"))
+                elif current_price <= tp and current_price <= entry * 0.985:  # Target hit and covers fees!
+                    to_close.append((pid, current_price, f"Тейк-профит к средней (+{(entry-current_price)/entry*100:.1f}%)"))
 
         for pid, exit_px, reason in to_close:
             res = self.portfolio.close_position(pid, exit_px, reason)
@@ -104,7 +104,7 @@ class MeanReversionStrategy:
         # Extreme Oversold: RSI < 30 and price <= lower BB -> Bounce BUY
         if rsi < 32 and current_price <= lower_bb * 1.002:
             sl = round(current_price * (1.0 - self.stop_loss_pct), 2)
-            tp = round(sma, 2)
+            tp = round(max(sma, current_price * 1.015), 2)
             trade_id = self.portfolio.open_position(
                 symbol=symbol,
                 side="BUY",
@@ -128,7 +128,7 @@ class MeanReversionStrategy:
         # Extreme Overbought: RSI > 68 and price >= upper BB -> Reversal SELL
         elif rsi > 68 and current_price >= upper_bb * 0.998:
             sl = round(current_price * (1.0 + self.stop_loss_pct), 2)
-            tp = round(sma, 2)
+            tp = round(min(sma, current_price * 0.985), 2)
             trade_id = self.portfolio.open_position(
                 symbol=symbol,
                 side="SELL",
