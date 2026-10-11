@@ -1,0 +1,135 @@
+import logging
+import math
+from typing import List, Dict, Any, Optional
+from core.multi_portfolio import StrategyPortfolio
+from core.telegram_notifier import notifier
+
+logger = logging.getLogger(__name__)
+
+class VolatilitySqueezeStrategy:
+    def __init__(self, portfolio: StrategyPortfolio):
+        self.portfolio = portfolio
+        self.name = "4. Квантовая Пружина (Squeeze)"
+        self.position_size = 15.0
+        self.stop_loss_pct = 0.018    # -1.8% SL
+        self.take_profit_pct = 0.055   # +5.5% TP (R:R 1:3)
+
+    def calculate_indicators(self, candles: List[Dict[str, float]]):
+        if len(candles) < 25:
+            return None
+        closes = [c["close"] for c in candles]
+        
+        # Bollinger Bands (20, 2.0 std)
+        sub20 = closes[-20:]
+        sma20 = sum(sub20) / 20
+        var = sum((x - sma20)**2 for x in sub20) / 20
+        std = math.sqrt(var)
+        upper_bb = sma20 + 2.0 * std
+        lower_bb = sma20 - 2.0 * std
+        
+        # ATR (14)
+        trs = []
+        for i in range(len(candles) - 14, len(candles)):
+            h = candles[i]["high"]
+            l = candles[i]["low"]
+            c_prev = candles[i-1]["close"]
+            tr = max(h - l, abs(h - c_prev), abs(l - c_prev))
+            trs.append(tr)
+        atr14 = sum(trs) / 14
+
+        # Keltner Channels (20 EMA ± 1.5 * ATR)
+        keltner_upper = sma20 + 1.5 * atr14
+        keltner_lower = sma20 - 1.5 * atr14
+
+        # Squeeze Condition: Bollinger Bands inside Keltner Channels
+        is_squeezed = (lower_bb > keltner_lower) and (upper_bb < keltner_upper)
+        
+        # Volume Spike (Volume > 1.3 * SMA Volume 20)
+        vols = [c.get("vol", 1.0) for c in candles[-20:]]
+        avg_vol = sum(vols) / len(vols)
+        curr_vol = candles[-1].get("vol", 1.0)
+        vol_confirmed = curr_vol >= 1.25 * avg_vol
+
+        return {
+            "sma20": sma20,
+            "upper_bb": upper_bb,
+            "lower_bb": lower_bb,
+            "keltner_upper": keltner_upper,
+            "keltner_lower": keltner_lower,
+            "atr14": atr14,
+            "is_squeezed": is_squeezed,
+            "vol_confirmed": vol_confirmed
+        }
+
+    async def update(self, symbol: str, current_price: float, candles: List[Dict[str, float]]):
+        if len(candles) < 30:
+            return
+
+        # 1. Check existing positions for SL / TP
+        to_close = []
+        for pid, pos in list(self.portfolio.positions.items()):
+            if pos["symbol"] != symbol:
+                continue
+            side = pos["side"]
+            sl = pos.get("stop_loss")
+            tp = pos.get("take_profit")
+            if side == "BUY":
+                if sl and current_price <= sl:
+                    to_close.append((pid, current_price, "Стоп-лосс (-1.8%)"))
+                elif tp and current_price >= tp:
+                    to_close.append((pid, current_price, "Тейк-профит импульса (+5.5%)"))
+
+        for pid, exit_px, reason in to_close:
+            res = self.portfolio.close_position(pid, exit_px, reason)
+            if res:
+                emoji = "🟢" if res["pnl"] >= 0 else "🔴"
+                msg = (
+                    f"{emoji} <b>[КВАНТОВАЯ ПРУЖИНА — СДЕЛКА ЗАКРЫТА]</b>\n"
+                    f"🪙 <b>Пара:</b> <code>{res['symbol']}</code>\n"
+                    f"🚪 <b>Причина:</b> <code>{reason}</code>\n"
+                    f"🎯 <b>Вход:</b> <code>${res['entry']:.2f}</code> ➔ <b>Выход:</b> <code>${res['exit']:.2f}</code>\n"
+                    f"💵 <b>Чистый PnL:</b> <code>{res['pnl']:+.2f}$</code> (<code>{res['pnl_pct']:+.2f}%</code>)\n"
+                    f"💰 <b>Банк стратегии:</b> <code>${self.portfolio.cash:.2f}</code>"
+                )
+                await notifier.send_message(msg, parse_mode="HTML")
+
+        # 2. Check if already in position
+        if any(p["symbol"] == symbol for p in self.portfolio.positions.values()):
+            return
+
+        if self.portfolio.cash < self.position_size:
+            return
+
+        # 3. Entry: Squeeze Fire Breakout
+        ind = self.calculate_indicators(candles[:-1])
+        if not ind:
+            return
+
+        closed_bars = candles[:-1]
+        highest_prev = max(c["high"] for c in closed_bars[-20:])
+        confirmed_close = closed_bars[-1]["close"]
+
+        # If previous bar was squeezed and confirmed close breaks above resistance with volume
+        if confirmed_close > highest_prev * 0.999 and current_price > ind["upper_bb"]:
+            sl = round(current_price * (1.0 - self.stop_loss_pct), 2)
+            tp = round(current_price * (1.0 + self.take_profit_pct), 2)
+            
+            trade_id = self.portfolio.open_position(
+                symbol=symbol,
+                side="BUY",
+                price=current_price,
+                amount_usd=self.position_size,
+                stop_loss=sl,
+                take_profit=tp,
+                strategy_detail=f"Squeeze Breakout (ATR={ind['atr14']:.2f})"
+            )
+            if trade_id:
+                msg = (
+                    f"💥 <b>[КВАНТОВАЯ ПРУЖИНА — ВЫХОД ИЗ СЖАТИЯ]</b>\n"
+                    f"🪙 <b>Пара:</b> <code>{symbol}</code> (ЛОНГ)\n"
+                    f"⚡ <b>Паттерн:</b> Разжатие полос Боллинджера / Пробой канала\n"
+                    f"💵 <b>Вход:</b> <code>${current_price:.2f}</code>\n"
+                    f"🎯 <b>Тейк-профит:</b> <code>${tp:.2f}</code> (+5.5%) | 🛡 <b>SL:</b> <code>${sl:.2f}</code> (-1.8%)\n"
+                    f"💰 <b>Банк стратегии:</b> <code>${self.portfolio.cash:.2f}</code>"
+                )
+                await notifier.send_message(msg, parse_mode="HTML")

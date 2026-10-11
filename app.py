@@ -13,6 +13,9 @@ from core.telegram_notifier import notifier
 from strategies.trend_strategy import TrendStrategy
 from strategies.grid_strategy import GridStrategy
 from strategies.reversion_strategy import MeanReversionStrategy
+from strategies.squeeze_strategy import VolatilitySqueezeStrategy
+from strategies.adaptive_grid_strategy import AdaptiveGridStrategy
+from strategies.dump_hunter_strategy import FlashDumpHunterStrategy
 
 try:
     import spaces
@@ -29,15 +32,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger("HF_App")
 
-tournament = TournamentManager(
-    trend_budget=config.TREND_BUDGET,
-    grid_budget=config.GRID_BUDGET,
-    reversion_budget=config.REVERSION_BUDGET
-)
+tournament = TournamentManager(initial_budget=100.0)
 
 strat_trend = TrendStrategy(tournament.strat_trend)
 strat_grid = GridStrategy(tournament.strat_grid)
 strat_reversion = MeanReversionStrategy(tournament.strat_reversion)
+strat_squeeze = VolatilitySqueezeStrategy(tournament.strat_squeeze)
+strat_adaptive_grid = AdaptiveGridStrategy(tournament.strat_adaptive_grid)
+strat_dump_hunter = FlashDumpHunterStrategy(tournament.strat_dump_hunter)
 
 live_prices = {}
 is_running = True
@@ -81,7 +83,10 @@ async def market_loop():
             await asyncio.gather(
                 strat_trend.update(symbol, current_price, candles),
                 strat_grid.update(symbol, current_price, candles),
-                strat_reversion.update(symbol, current_price, candles)
+                strat_reversion.update(symbol, current_price, candles),
+                strat_squeeze.update(symbol, current_price, candles),
+                strat_adaptive_grid.update(symbol, current_price, candles),
+                strat_dump_hunter.update(symbol, current_price, candles)
             )
 
         tournament.save()
@@ -110,10 +115,13 @@ async def telegram_command_listener():
                             if text in ["/start", "старт"]:
                                 reply = (
                                     "👋 <b>Добро пожаловать в турнир Торговых Алгоритмов 24/7!</b>\n\n"
-                                    "В этом боте 3 независимые алгоритмические стратегии соревнуются на реальном рынке криптовалют (BTC / ETH / SOL):\n"
+                                    "В этом боте 6 независимых алгоритмических стратегий соревнуются на реальном рынке криптовалют (BTC / ETH / SOL) с равным бюджетом $100 каждая ($600 суммарно):\n"
                                     "1. ⚡ <b>Long-Only Трендовый пробой</b> (Donchian + EMA50)\n"
                                     "2. 🕸️ <b>Спотовая Сетка</b> (Trend-Hedged Grid 2.0%)\n"
-                                    "3. 🌊 <b>Возврат к средней</b> (RSI + Bollinger Bands)\n\n"
+                                    "3. 🌊 <b>Возврат к средней</b> (RSI + Bollinger Bands)\n"
+                                    "4. 💥 <b>Квантовая Пружина</b> (ATR Volatility Squeeze Breakout)\n"
+                                    "5. 📐 <b>Адаптивная Сетка</b> (ATR Dynamic Step Grid)\n"
+                                    "6. 🎯 <b>Охотник за сквизами</b> (Flash Dump & Liquidation Hunter)\n\n"
                                     "📊 <b>Команды:</b>\n"
                                     "• /status или /leaderboard — текущий баланс, PnL и рейтинг\n"
                                     "• /trades — детальный список открытых сделок\n"
@@ -126,11 +134,12 @@ async def telegram_command_listener():
                                 summary = tournament.get_summary(live_prices)
                                 lb = tournament.get_leaderboard(live_prices)
                                 table_data = []
-                                medals = ["🥇", "🥈", "🥉"]
+                                medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣"]
                                 for i, s in enumerate(lb):
                                     pnl_sign = "+" if s['total_pnl'] >= 0 else ""
+                                    medal = medals[i] if i < len(medals) else f"#{i+1}"
                                     table_data.append([
-                                        f"{medals[i]} {s['name'][:8]}",
+                                        f"{medal} {s['name'][:8]}",
                                         f"${s['equity']:.1f}",
                                         f"{pnl_sign}{s['total_pnl_pct']:.1f}%",
                                         f"{s['win_rate']:.0f}%"
@@ -156,7 +165,10 @@ async def telegram_command_listener():
                                 for strat_name, strat in [
                                     ("⚡ Trend Follower", tournament.strat_trend),
                                     ("🕸️ Spot Grid", tournament.strat_grid),
-                                    ("🌊 Mean Reversion", tournament.strat_reversion)
+                                    ("🌊 Mean Reversion", tournament.strat_reversion),
+                                    ("💥 Volatility Squeeze", tournament.strat_squeeze),
+                                    ("📐 Adaptive Grid", tournament.strat_adaptive_grid),
+                                    ("🎯 Flash Dump Hunter", tournament.strat_dump_hunter)
                                 ]:
                                     if strat.positions:
                                         has_trades = True
@@ -238,13 +250,14 @@ def generate_dashboard_html():
     summary = tournament.get_summary(live_prices)
 
     rows_html = ""
-    medals = ["🥇", "🥈", "🥉"]
+    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣"]
     for i, s in enumerate(lb):
         pnl_color = "#34d399" if s['total_pnl'] >= 0 else "#f87171"
         pnl_str = f"+${s['total_pnl']:.2f}" if s['total_pnl'] >= 0 else f"-${abs(s['total_pnl']):.2f}"
+        medal = medals[i] if i < len(medals) else f"#{i+1}"
         rows_html += f"""
         <tr style="border-bottom: 1px solid #334155;">
-            <td style="padding: 14px 18px;"><span style="font-weight: 700; font-size: 15px;">{medals[i]} {i+1}</span></td>
+            <td style="padding: 14px 18px;"><span style="font-weight: 700; font-size: 15px;">{medal} {i+1}</span></td>
             <td style="padding: 14px 18px; font-weight: 600;">{s['name']}</td>
             <td style="padding: 14px 18px; font-weight: bold;">${s['equity']:.2f}</td>
             <td style="padding: 14px 18px;">${s['cash']:.2f}</td>

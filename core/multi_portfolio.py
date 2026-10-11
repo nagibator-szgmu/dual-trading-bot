@@ -149,10 +149,22 @@ class StrategyPortfolio:
 
 
 class TournamentManager:
-    def __init__(self, trend_budget=100.0, grid_budget=100.0, reversion_budget=100.0):
-        self.strat_trend = StrategyPortfolio("1. Трендовый пробой (15m)", "trend", trend_budget)
-        self.strat_grid = StrategyPortfolio("2. Спотовая Сетка (Grid)", "grid", grid_budget)
-        self.strat_reversion = StrategyPortfolio("3. Возврат к средней (RSI)", "reversion", reversion_budget)
+    def __init__(self, initial_budget: float = 100.0):
+        self.strat_trend = StrategyPortfolio("1. Long-Only Пробой (EMA50)", "trend", initial_budget)
+        self.strat_grid = StrategyPortfolio("2. Спотовая Сетка (Trend Grid)", "grid", initial_budget)
+        self.strat_reversion = StrategyPortfolio("3. Возврат к средней (RSI)", "reversion", initial_budget)
+        self.strat_squeeze = StrategyPortfolio("4. Квантовая Пружина (Squeeze)", "squeeze", initial_budget)
+        self.strat_adaptive_grid = StrategyPortfolio("5. Адаптивная Сетка (ATR)", "adaptive_grid", initial_budget)
+        self.strat_dump_hunter = StrategyPortfolio("6. Охотник за сквизами (Dump)", "dump_hunter", initial_budget)
+        self.strategies = [
+            self.strat_trend,
+            self.strat_grid,
+            self.strat_reversion,
+            self.strat_squeeze,
+            self.strat_adaptive_grid,
+            self.strat_dump_hunter
+        ]
+        self.total_initial = len(self.strategies) * initial_budget
         self.load()
 
     def load(self):
@@ -160,22 +172,15 @@ class TournamentManager:
             try:
                 with open(PORTFOLIO_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    if "trend" in data:
-                        self.strat_trend.from_dict(data["trend"])
-                    if "grid" in data:
-                        self.strat_grid.from_dict(data["grid"])
-                    if "reversion" in data:
-                        self.strat_reversion.from_dict(data["reversion"])
+                    for s in self.strategies:
+                        if s.code in data:
+                            s.from_dict(data[s.code])
             except Exception:
                 pass
 
     def save(self):
         temp_file = f"{PORTFOLIO_FILE}.tmp"
-        data = {
-            "trend": self.strat_trend.to_dict(),
-            "grid": self.strat_grid.to_dict(),
-            "reversion": self.strat_reversion.to_dict()
-        }
+        data = {s.code: s.to_dict() for s in self.strategies}
         try:
             with open(temp_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
@@ -185,12 +190,7 @@ class TournamentManager:
                 json.dump(data, f, indent=2, ensure_ascii=False)
 
     def get_leaderboard(self, live_prices: Optional[Dict[str, float]] = None) -> List[Dict[str, Any]]:
-        strats = [
-            self.strat_trend.get_stats(live_prices),
-            self.strat_grid.get_stats(live_prices),
-            self.strat_reversion.get_stats(live_prices)
-        ]
-        # Sort by total_pnl descending
+        strats = [s.get_stats(live_prices) for s in self.strategies]
         strats.sort(key=lambda s: s["total_pnl"], reverse=True)
         return strats
 
@@ -199,13 +199,14 @@ class TournamentManager:
         total_equity = sum(s["equity"] for s in strats)
         total_cash = sum(s["cash"] for s in strats)
         total_open = sum(s["open_count"] for s in strats)
-        total_pnl = total_equity - 300.0
+        total_pnl = total_equity - self.total_initial
+        total_pnl_pct = (total_pnl / self.total_initial) * 100 if self.total_initial > 0 else 0.0
         return {
             "total_equity": round(total_equity, 2),
             "total_cash": round(total_cash, 2),
             "total_open_positions": total_open,
             "total_pnl": round(total_pnl, 2),
-            "total_pnl_pct": round((total_pnl / 300.0) * 100, 2),
+            "total_pnl_pct": round(total_pnl_pct, 2),
             "leaderboard": strats
         }
 
@@ -225,7 +226,7 @@ class TournamentManager:
                 "PnL_Percent",
                 "Reason"
             ])
-            for strat in [self.strat_trend, self.strat_grid, self.strat_reversion]:
+            for strat in self.strategies:
                 for t in strat.trades:
                     writer.writerow([
                         t.get("time", ""),
