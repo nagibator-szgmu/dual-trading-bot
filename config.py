@@ -6,7 +6,7 @@ load_dotenv()
 
 @dataclass
 class Config:
-    TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "8652102736:AAGaWF4dTArUqDZPSPYQppRwlYOHVSsrajA")
+    TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "8951644743:AAH2X1JfkNl8HTnJPZdIc8yls_SiA-U7UW4")
     TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "5579630526")
 
     # Tournament Budgets: $100 for each independent strategy
@@ -21,7 +21,7 @@ class Config:
     HEARTBEAT_INTERVAL: int = 300  # Tournament digest every 5 minutes
 
     # CS2 Skin Sniper Settings
-    CS2_BOT_TOKEN: str = os.getenv("CS2_BOT_TOKEN", "8996410296:AAHNNPjvezKySwYd69C0NFFEr7pUE2BMIS0")
+    CS2_BOT_TOKEN: str = os.getenv("CS2_BOT_TOKEN", "8667647842:AAF0Ui-aolcAy6XCwo7fnyqwQsvafPF6DNo")
     CS2_BUDGET: float = 200.0
     CS2_SCAN_INTERVAL: int = 300  # 5 minutes, matching Skinport CDN cache and avoiding 429 rate limit
     CS2_MIN_DISCOUNT_PCT: float = 15.0  # minimum 15% discount below real average sales price

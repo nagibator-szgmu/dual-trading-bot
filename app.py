@@ -334,7 +334,7 @@ def generate_dashboard_html():
         </table>
 
         <div style="margin-top: 24px; text-align: center; color: #94a3b8; font-size: 13px;">
-            Управление и экспорт: <a href="https://t.me/bu7634bot" target="_blank" style="color: #38bdf8; text-decoration: none; font-weight: 600;">Telegram @bu7634bot</a> | Команды: /status, /trades, /export, /help
+            Управление и экспорт: <a href="https://t.me/ct331_bot" target="_blank" style="color: #38bdf8; text-decoration: none; font-weight: 600;">Telegram @ct331_bot</a> | Команды: /status, /trades, /export, /help
         </div>
     </div>
     """
@@ -417,7 +417,7 @@ def generate_cs2_dashboard_html():
         </table>
 
         <div style="margin-top: 24px; text-align: center; color: #94a3b8; font-size: 13px;">
-            Управление CS2 ботом: <a href="https://t.me/css33_bot" target="_blank" style="color: #38bdf8; text-decoration: none; font-weight: 600;">Telegram @css33_bot</a> | Команды: /status, /inventory, /scan, /export
+            Управление CS2 ботом: <a href="https://t.me/cs233_bot" target="_blank" style="color: #38bdf8; text-decoration: none; font-weight: 600;">Telegram @cs233_bot</a> | Команды: /status, /inventory, /scan, /export
         </div>
     </div>
     """
