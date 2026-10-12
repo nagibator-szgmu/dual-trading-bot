@@ -13,6 +13,7 @@ class TrendStrategy:
         self.position_size = 15.0
         self.stop_loss_pct = 0.020   # -2.0%
         self.take_profit_pct = 0.060  # +6.0% (Reward:Risk = 1 : 3.0)
+        self.cooldowns: dict = {}
 
     def round_price(self, px: float) -> float:
         return round(px, 4 if px < 10.0 else 2)
@@ -74,6 +75,7 @@ class TrendStrategy:
         for pid, exit_px, reason in to_close:
             res = self.portfolio.close_position(pid, exit_px, reason)
             if res:
+                self.cooldowns[symbol] = time.time() + 3600  # 1 hour cooldown to prevent churn loop
                 emoji = "🟢" if res["pnl"] >= 0 else "🔴"
                 msg = (
                     f"{emoji} <b>[ТРЕНД 1H — СДЕЛКА ЗАКРЫТА]</b>\n"
@@ -85,8 +87,11 @@ class TrendStrategy:
                 )
                 await notifier.send_message(msg, parse_mode="HTML")
 
-        # 2. Check if we already have position in this symbol
+        # 2. Check if we already have position in this symbol or cooldown active
         if any(p["symbol"] == symbol for p in self.portfolio.positions.values()):
+            return
+
+        if time.time() < self.cooldowns.get(symbol, 0):
             return
 
         if self.portfolio.cash < self.position_size:
@@ -105,7 +110,7 @@ class TrendStrategy:
         tp = None
 
         # Long-Only filter: Buy only on verified breakout above resistance with EMA trend confirmation
-        if confirmed_close > highest_prev and ema_fast > ema_slow:
+        if confirmed_close > highest_prev and ema_fast > ema_slow and confirmed_close > ema_slow:
             signal = "BUY"
             sl = self.round_price(current_price * (1.0 - self.stop_loss_pct))
             tp = self.round_price(current_price * (1.0 + self.take_profit_pct))

@@ -15,6 +15,7 @@ class HyperCascadeSniperStrategy:
         self.stage2_size = 20.0
         self.stage3_size = 15.0
         self.initial_sl_pct = 0.015  # -1.5% SL on stage 1
+        self.cooldowns: dict = {}
 
     def detect_breakout_and_volume(self, candles: List[Dict[str, float]]):
         if len(candles) < 25:
@@ -116,15 +117,11 @@ class HyperCascadeSniperStrategy:
                 to_close.append((pid, current_price, reason))
                 continue
 
-            # Time-Stop for stalled Stage 1
-            if stage == 1 and time_elapsed >= 5 * 3600:
-                to_close.append((pid, current_price, "Таймаут удержания (Time-Stop 5ч)"))
-                continue
-
         # Close flagged positions
         for pid, exit_px, reason in to_close:
             res = self.portfolio.close_position(pid, exit_px, reason)
             if res:
+                self.cooldowns[symbol] = time.time() + 3600  # 1 hour cooldown to prevent churn loop
                 emoji = "🟢" if res["pnl"] >= 0 else "🔴"
                 msg = (
                     f"{emoji} <b>[HYPERCASCADE — СДЕЛКА ЗАКРЫТА]</b>\n"
@@ -136,8 +133,11 @@ class HyperCascadeSniperStrategy:
                 )
                 await notifier.send_message(msg, parse_mode="HTML")
 
-        # 2. Check if already in position for this symbol
+        # 2. Check if already in position for this symbol or cooldown active
         if any(p["symbol"] == symbol for p in self.portfolio.positions.values()):
+            return
+
+        if time.time() < self.cooldowns.get(symbol, 0):
             return
 
         if self.portfolio.cash < self.stage1_size:

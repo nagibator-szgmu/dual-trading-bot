@@ -14,6 +14,7 @@ class VolatilitySqueezeStrategy:
         self.position_size = 15.0
         self.stop_loss_pct = 0.018    # -1.8% SL
         self.take_profit_pct = 0.055   # +5.5% TP (R:R 1:3)
+        self.cooldowns: dict = {}
 
     def round_price(self, px: float) -> float:
         return round(px, 4 if px < 10.0 else 2)
@@ -96,28 +97,17 @@ class VolatilitySqueezeStrategy:
                 )
                 await notifier.send_message(be_msg, parse_mode="HTML")
 
-            # Time-Stop check: 6 hours (21600s)
-            now_ts = time.time()
-            open_ts = pos.get("opened_at_ts")
-            if not open_ts and pos.get("time"):
-                try:
-                    open_ts = time.mktime(time.strptime(pos["time"], "%Y-%m-%d %H:%M:%S"))
-                except Exception:
-                    open_ts = now_ts
-            time_elapsed = now_ts - (open_ts or now_ts)
-
             if side == "BUY":
                 if sl and current_price <= sl:
                     reason = "Безубыток (+0.2%)" if pos.get("breakeven") and current_price >= entry else "Стоп-лосс (-1.8%)"
                     to_close.append((pid, current_price, reason))
                 elif tp and current_price >= tp:
                     to_close.append((pid, current_price, "Тейк-профит импульса (+5.5%)"))
-                elif time_elapsed >= 6 * 3600:
-                    to_close.append((pid, current_price, "Таймаут удержания (Time-Stop 6ч)"))
 
         for pid, exit_px, reason in to_close:
             res = self.portfolio.close_position(pid, exit_px, reason)
             if res:
+                self.cooldowns[symbol] = time.time() + 3600  # 1 hour cooldown to prevent churn loop
                 emoji = "🟢" if res["pnl"] >= 0 else "🔴"
                 msg = (
                     f"{emoji} <b>[КВАНТОВАЯ ПРУЖИНА — СДЕЛКА ЗАКРЫТА]</b>\n"
@@ -129,8 +119,11 @@ class VolatilitySqueezeStrategy:
                 )
                 await notifier.send_message(msg, parse_mode="HTML")
 
-        # 2. Check if already in position
+        # 2. Check if already in position or cooldown active
         if any(p["symbol"] == symbol for p in self.portfolio.positions.values()):
+            return
+
+        if time.time() < self.cooldowns.get(symbol, 0):
             return
 
         if self.portfolio.cash < self.position_size:

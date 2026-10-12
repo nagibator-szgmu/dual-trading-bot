@@ -13,6 +13,7 @@ class MeanReversionStrategy:
         self.name = "3. Возврат к средней (RSI + BB)"
         self.position_size = 15.0
         self.stop_loss_pct = 0.018
+        self.cooldowns: dict = {}
 
     def round_price(self, px: float) -> float:
         return round(px, 4 if px < 10.0 else 2)
@@ -73,34 +74,34 @@ class MeanReversionStrategy:
             sl = pos.get("stop_loss")
             tp = pos.get("take_profit")
 
-            # Time-Stop: 4 hours (14400s) for mean-reversion impulses
-            now_ts = time.time()
-            open_ts = pos.get("opened_at_ts")
-            if not open_ts and pos.get("time"):
-                try:
-                    open_ts = time.mktime(time.strptime(pos["time"], "%Y-%m-%d %H:%M:%S"))
-                except Exception:
-                    open_ts = now_ts
-            time_elapsed = now_ts - (open_ts or now_ts)
+            # Trailing Breakeven: when profit reaches +0.8%, lock SL at entry + 0.2%
+            if not pos.get("breakeven") and current_price >= entry * 1.008:
+                new_sl = self.round_price(entry * 1.002)
+                pos["stop_loss"] = new_sl
+                pos["breakeven"] = True
+                sl = new_sl
+                p_fmt = f"${entry:.4f}" if entry < 10 else f"${entry:.2f}"
+                cur_fmt = f"${current_price:.4f}" if current_price < 10 else f"${current_price:.2f}"
+                sl_fmt = f"${new_sl:.4f}" if new_sl < 10 else f"${new_sl:.2f}"
+                be_msg = (
+                    f"🛡 <b>[RSI ОТСКОК — ПЕРЕВОД В БЕЗУБЫТОК]</b>\n"
+                    f"🪙 <b>Пара:</b> <code>{symbol}</code> (BUY)\n"
+                    f"🎯 <b>Вход:</b> <code>{p_fmt}</code> ➔ <b>Тек:</b> <code>{cur_fmt}</code> (+0.8%)\n"
+                    f"🔒 <b>Новый Стоп-Лосс:</b> <code>{sl_fmt}</code> (гарантия прибыли +0.2%)"
+                )
+                await notifier.send_message(be_msg, parse_mode="HTML")
 
             if side == "BUY":
                 if sl and current_price <= sl:
-                    to_close.append((pid, current_price, "Стоп-лосс (-1.8%)"))
+                    reason = "Безубыток (+0.2%)" if pos.get("breakeven") and current_price >= entry else "Стоп-лосс (-1.8%)"
+                    to_close.append((pid, current_price, reason))
                 elif current_price >= tp and current_price >= entry * 1.015:  # Target hit and covers fees!
                     to_close.append((pid, current_price, f"Тейк-профит к средней (+{(current_price-entry)/entry*100:.1f}%)"))
-                elif time_elapsed >= 4 * 3600:
-                    to_close.append((pid, current_price, "Таймаут удержания (Time-Stop 4ч)"))
-            elif side == "SELL":
-                if sl and current_price >= sl:
-                    to_close.append((pid, current_price, "Стоп-лосс (-1.8%)"))
-                elif current_price <= tp and current_price <= entry * 0.985:  # Target hit and covers fees!
-                    to_close.append((pid, current_price, f"Тейк-профит к средней (+{(entry-current_price)/entry*100:.1f}%)"))
-                elif time_elapsed >= 4 * 3600:
-                    to_close.append((pid, current_price, "Таймаут удержания (Time-Stop 4ч)"))
 
         for pid, exit_px, reason in to_close:
             res = self.portfolio.close_position(pid, exit_px, reason)
             if res:
+                self.cooldowns[symbol] = time.time() + 3600  # 1 hour cooldown to prevent churn loop
                 emoji = "🟢" if res["pnl"] >= 0 else "🔴"
                 msg = (
                     f"{emoji} <b>[RSI ОТСКОК — ЗАКРЫТИЕ ПОЗИЦИИ]</b>\n"
@@ -112,8 +113,11 @@ class MeanReversionStrategy:
                 )
                 await notifier.send_message(msg, parse_mode="HTML")
 
-        # 2. Check if we already have position in this symbol
+        # 2. Check if we already have position in this symbol or cooldown active
         if any(p["symbol"] == symbol for p in self.portfolio.positions.values()):
+            return
+
+        if time.time() < self.cooldowns.get(symbol, 0):
             return
 
         if self.portfolio.cash < self.position_size:
