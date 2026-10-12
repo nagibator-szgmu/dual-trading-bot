@@ -53,6 +53,18 @@ class MeanReversionStrategy:
         lower = sma - num_std * std_dev
         return sma, upper, lower
 
+    def calculate_atr(self, candles: List[Dict[str, float]], period: int = 14) -> float:
+        if len(candles) < period + 1:
+            return 0.0
+        trs = []
+        for i in range(len(candles) - period, len(candles)):
+            h = candles[i]["high"]
+            l = candles[i]["low"]
+            c_prev = candles[i - 1]["close"]
+            tr = max(h - l, abs(h - c_prev), abs(l - c_prev))
+            trs.append(tr)
+        return sum(trs) / period
+
     async def update(self, symbol: str, current_price: float, candles: List[Dict[str, float]]):
         if len(candles) < 25:
             return
@@ -63,6 +75,7 @@ class MeanReversionStrategy:
         if not bb:
             return
         sma, upper_bb, lower_bb = bb
+        atr14 = self.calculate_atr(candles, period=14)
 
         # 1. Check existing positions
         to_close = []
@@ -74,9 +87,9 @@ class MeanReversionStrategy:
             sl = pos.get("stop_loss")
             tp = pos.get("take_profit")
 
-            # Trailing Breakeven: when profit reaches +0.8%, lock SL at entry + 0.2%
-            if not pos.get("breakeven") and current_price >= entry * 1.008:
-                new_sl = self.round_price(entry * 1.002)
+            # Trailing Breakeven: when profit reaches +0.9%, lock SL at entry + 0.5%
+            if not pos.get("breakeven") and current_price >= entry * 1.009:
+                new_sl = self.round_price(entry * 1.005)
                 pos["stop_loss"] = new_sl
                 pos["breakeven"] = True
                 sl = new_sl
@@ -86,16 +99,22 @@ class MeanReversionStrategy:
                 be_msg = (
                     f"🛡 <b>[RSI ОТСКОК — ПЕРЕВОД В БЕЗУБЫТОК]</b>\n"
                     f"🪙 <b>Пара:</b> <code>{symbol}</code> (BUY)\n"
-                    f"🎯 <b>Вход:</b> <code>{p_fmt}</code> ➔ <b>Тек:</b> <code>{cur_fmt}</code> (+0.8%)\n"
-                    f"🔒 <b>Новый Стоп-Лосс:</b> <code>{sl_fmt}</code> (гарантия прибыли +0.2%)"
+                    f"🎯 <b>Вход:</b> <code>{p_fmt}</code> ➔ <b>Тек:</b> <code>{cur_fmt}</code> (+0.9%)\n"
+                    f"🔒 <b>Новый Стоп-Лосс:</b> <code>{sl_fmt}</code> (гарантия прибыли +0.5%)"
                 )
                 await notifier.send_message(be_msg, parse_mode="HTML")
+            elif pos.get("breakeven") and atr14 > 0:
+                # Dynamic ATR trailing stop: 0.7 * ATR behind price
+                trail_sl = self.round_price(current_price - 0.7 * atr14)
+                if trail_sl > pos.get("stop_loss", 0):
+                    pos["stop_loss"] = trail_sl
+                    sl = trail_sl
 
             if side == "BUY":
                 if sl and current_price <= sl:
-                    reason = "Безубыток (+0.2%)" if pos.get("breakeven") and current_price >= entry else "Стоп-лосс (-1.8%)"
+                    reason = f"Безубыток/Трейлинг (+{(current_price-entry)/entry*100:.1f}%)" if pos.get("breakeven") and current_price >= entry else "Стоп-лосс (-1.8%)"
                     to_close.append((pid, current_price, reason))
-                elif current_price >= tp and current_price >= entry * 1.015:  # Target hit and covers fees!
+                elif current_price >= tp and current_price >= entry * 1.020:  # Minimum 2.0% profit target
                     to_close.append((pid, current_price, f"Тейк-профит к средней (+{(current_price-entry)/entry*100:.1f}%)"))
 
         for pid, exit_px, reason in to_close:
@@ -123,10 +142,17 @@ class MeanReversionStrategy:
         if self.portfolio.cash < self.position_size:
             return
 
-        # 3. Entry conditions: Long-Only Oversold Bounce on Spot (avoid unhedged spot shorts)
-        if rsi < 32 and current_price <= lower_bb * 1.002:
+        # Volume filter: bar volume > 1.1 * SMA20
+        vols = [c.get("vol", 0.0) for c in candles[:-1]]
+        vol_sma20 = sum(vols[-20:]) / 20 if len(vols) >= 20 else 0.0
+        curr_vol = candles[-1].get("vol", 0.0)
+        vol_ok = curr_vol >= 1.1 * vol_sma20 if vol_sma20 > 0 else True
+
+        # 3. Entry conditions: RSI <= 30, Close <= Lower_BB * 0.997 and Volume Confirmation
+        if rsi <= 30.0 and current_price <= lower_bb * 0.997 and vol_ok:
             sl = self.round_price(current_price * (1.0 - self.stop_loss_pct))
-            tp = self.round_price(max(sma, current_price * 1.015))
+            # Guaranteed TP >= +2.0%, or return to SMA + 0.3%
+            tp = self.round_price(max(sma * 1.003, current_price * 1.020))
             trade_id = self.portfolio.open_position(
                 symbol=symbol,
                 side="BUY",
@@ -134,7 +160,7 @@ class MeanReversionStrategy:
                 amount_usd=self.position_size,
                 stop_loss=sl,
                 take_profit=tp,
-                strategy_detail=f"Oversold Bounce (RSI={rsi:.1f})"
+                strategy_detail=f"Oversold Bounce (RSI={rsi:.1f}, BB-Break)"
             )
             if trade_id:
                 p_fmt = f"${current_price:.4f}" if current_price < 10 else f"${current_price:.2f}"
@@ -143,9 +169,9 @@ class MeanReversionStrategy:
                 msg = (
                     f"🧲 <b>[RSI ОТСКОК — ВХОД В ЛОНГ]</b>\n"
                     f"🪙 <b>Пара:</b> <code>{symbol}</code> (ЛОНГ)\n"
-                    f"📉 <b>Индикатор:</b> RSI = <code>{rsi:.1f}</code> (Перепроданность)\n"
+                    f"📉 <b>Индикатор:</b> RSI = <code>{rsi:.1f}</code> (≤30.0, BB-Прокол)\n"
                     f"💵 <b>Цена входа:</b> <code>{p_fmt}</code>\n"
-                    f"🎯 <b>Цель (средняя):</b> <code>{tp_fmt}</code> | SL: <code>{sl_fmt}</code>\n"
+                    f"🎯 <b>Цель (средняя):</b> <code>{tp_fmt}</code> (≥+2.0%) | SL: <code>{sl_fmt}</code>\n"
                     f"💰 <b>Банк:</b> <code>${self.portfolio.cash:.2f}</code>"
                 )
                 await notifier.send_message(msg, parse_mode="HTML")

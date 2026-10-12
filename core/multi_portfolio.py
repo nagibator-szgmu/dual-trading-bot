@@ -178,6 +178,7 @@ class TournamentManager:
         self.strat_adaptive_grid = StrategyPortfolio("5. Адаптивная Сетка (ATR)", "adaptive_grid", initial_budget)
         self.strat_dump_hunter = StrategyPortfolio("6. Охотник за сквизами (Dump)", "dump_hunter", initial_budget)
         self.strat_cascade = StrategyPortfolio("7. HyperCascade Sniper (Пирамидинг)", "cascade", initial_budget)
+        self.strat_poc = StrategyPortfolio("8. POC Pullback (Volume Profile)", "poc_pullback", initial_budget)
         self.strategies = [
             self.strat_trend,
             self.strat_grid,
@@ -185,7 +186,8 @@ class TournamentManager:
             self.strat_squeeze,
             self.strat_adaptive_grid,
             self.strat_dump_hunter,
-            self.strat_cascade
+            self.strat_cascade,
+            self.strat_poc
         ]
         self.total_initial = len(self.strategies) * initial_budget
         self.load()

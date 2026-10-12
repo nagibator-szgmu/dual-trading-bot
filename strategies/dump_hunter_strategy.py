@@ -19,35 +19,66 @@ class FlashDumpHunterStrategy:
     def round_price(self, px: float) -> float:
         return round(px, 4 if px < 10.0 else 2)
 
+    def calculate_atr(self, candles: List[Dict[str, float]], period: int = 14) -> float:
+        if len(candles) < period + 1:
+            return 0.0
+        trs = []
+        for i in range(len(candles) - period, len(candles)):
+            h = candles[i]["high"]
+            l = candles[i]["low"]
+            c_prev = candles[i - 1]["close"]
+            tr = max(h - l, abs(h - c_prev), abs(l - c_prev))
+            trs.append(tr)
+        return sum(trs) / period
+
     def detect_liquidation_wick(self, candles: List[Dict[str, float]]):
-        if len(candles) < 20:
-            return False, 0.0
+        if len(candles) < 25:
+            return False, 0.0, 0.022
         
         last_candle = candles[-1]
         prev_candles = candles[-20:-1]
         
-        closes = [c["close"] for c in prev_candles]
-        sma = sum(closes) / len(closes)
-        var = sum((x - sma)**2 for x in closes) / len(closes)
-        std = math.sqrt(var)
-        lower_band = sma - 2.2 * std
-
-        # Drop magnitude on current/previous bar
+        # 1. Volume SMA20
+        vols = [c.get("vol", 0.0) for c in prev_candles]
+        vol_sma = sum(vols) / len(vols) if vols else 1.0
+        curr_vol = last_candle.get("vol", 0.0)
+        vol_ratio = curr_vol / vol_sma if vol_sma > 0 else 1.0
+        
+        # 2. Drop depth: dip from high of last 4 candles
+        recent_highs = [c["high"] for c in candles[-5:]]
+        max_high = max(recent_highs)
         o = last_candle["open"]
         l = last_candle["low"]
+        h = last_candle["high"]
         c = last_candle["close"]
-        drop_pct = (o - l) / o if o > 0 else 0.0
         
-        # Wick size (buyers started absorbing the dump)
-        wick_size = (c - l) / (o - l) if (o - l) > 0 else 0.0
+        drop_from_high = (max_high - l) / max_high if max_high > 0 else 0.0
+        candle_range = (h - l) if (h - l) > 0 else 0.0001
         
-        # Trigger: drop > 2.2% or pierced lower 2.2 std band and formed a lower shadow/wick >= 30%
-        is_dump = (drop_pct >= 0.020 or l <= lower_band) and (wick_size >= 0.25)
-        return is_dump, drop_pct
+        # Lower wick size: buyers absorbed the sell-off off the lows
+        lower_wick = min(o, c) - l
+        wick_ratio = lower_wick / candle_range
+        
+        # Close in upper portion: buyers regained control into bar close
+        close_location = (c - l) / candle_range
+        
+        # Rigorous filters from quantitative audit:
+        # - drop >= 2.2% from recent 4-bar high
+        # - wick_ratio >= 0.50 (at least 50% lower shadow)
+        # - volume >= 2.5x SMA20
+        # - close in upper portion (close_location >= 0.50)
+        is_dump = (drop_from_high >= 0.022) and (wick_ratio >= 0.50) and (vol_ratio >= 2.5) and (close_location >= 0.50)
+        
+        # Target TP: +2.2% on standard rebound, +3.2% if explosive volume
+        target_tp = 0.032 if vol_ratio >= 3.5 else 0.022
+        
+        return is_dump, drop_from_high, target_tp
 
     async def update(self, symbol: str, current_price: float, candles: List[Dict[str, float]]):
         if len(candles) < 25:
             return
+
+        atr14 = self.calculate_atr(candles, period=14)
 
         # 1. Check existing positions
         to_close = []
@@ -58,9 +89,9 @@ class FlashDumpHunterStrategy:
             sl = pos.get("stop_loss")
             tp = pos.get("take_profit")
 
-            # Trailing Breakeven: when profit reaches +0.8%, lock SL at entry + 0.2%
-            if not pos.get("breakeven") and current_price >= entry * 1.008:
-                new_sl = self.round_price(entry * 1.002)
+            # Trailing Breakeven: when profit reaches +0.9%, lock SL at entry + 0.5%
+            if not pos.get("breakeven") and current_price >= entry * 1.009:
+                new_sl = self.round_price(entry * 1.005)
                 pos["stop_loss"] = new_sl
                 pos["breakeven"] = True
                 sl = new_sl
@@ -70,16 +101,22 @@ class FlashDumpHunterStrategy:
                 be_msg = (
                     f"🛡 <b>[ОХОТНИК ЗА СКВИЗАМИ — ПЕРЕВОД В БЕЗУБЫТОК]</b>\n"
                     f"🪙 <b>Пара:</b> <code>{symbol}</code> (BUY)\n"
-                    f"🎯 <b>Вход:</b> <code>{p_fmt}</code> ➔ <b>Тек:</b> <code>{cur_fmt}</code> (+0.8%)\n"
-                    f"🔒 <b>Новый Стоп-Лосс:</b> <code>{sl_fmt}</code> (гарантия прибыли +0.2%)"
+                    f"🎯 <b>Вход:</b> <code>{p_fmt}</code> ➔ <b>Тек:</b> <code>{cur_fmt}</code> (+0.9%)\n"
+                    f"🔒 <b>Новый Стоп-Лосс:</b> <code>{sl_fmt}</code> (гарантия прибыли +0.5%)"
                 )
                 await notifier.send_message(be_msg, parse_mode="HTML")
+            elif pos.get("breakeven") and atr14 > 0:
+                # Dynamic ATR trailing stop: 0.7 * ATR behind price
+                trail_sl = self.round_price(current_price - 0.7 * atr14)
+                if trail_sl > pos.get("stop_loss", 0):
+                    pos["stop_loss"] = trail_sl
+                    sl = trail_sl
 
             if sl and current_price <= sl:
-                reason = "Безубыток (+0.2%)" if pos.get("breakeven") and current_price >= entry else "Стоп-лосс сквиза (-2.0%)"
+                reason = f"Безубыток/Трейлинг (+{(current_price-entry)/entry*100:.1f}%)" if pos.get("breakeven") and current_price >= entry else "Стоп-лосс сквиза (-2.0%)"
                 to_close.append((pid, current_price, reason))
-            elif tp and current_price >= tp:
-                to_close.append((pid, current_price, "Тейк-профит V-отскока (+2.8%)"))
+            elif tp and current_price >= tp and current_price >= entry * 1.020:
+                to_close.append((pid, current_price, f"Тейк-профит V-отскока (+{(current_price-entry)/entry*100:.1f}%)"))
 
         for pid, exit_px, reason in to_close:
             res = self.portfolio.close_position(pid, exit_px, reason)
@@ -107,10 +144,10 @@ class FlashDumpHunterStrategy:
             return
 
         # 3. Detect flash dump liquidation spike
-        is_dump, drop_pct = self.detect_liquidation_wick(candles)
+        is_dump, drop_pct, tp_target_pct = self.detect_liquidation_wick(candles)
         if is_dump:
             sl = self.round_price(current_price * (1.0 - self.stop_loss_pct))
-            tp = self.round_price(current_price * (1.0 + self.take_profit_pct))
+            tp = self.round_price(current_price * (1.0 + tp_target_pct))
             trade_id = self.portfolio.open_position(
                 symbol=symbol,
                 side="BUY",
@@ -127,9 +164,9 @@ class FlashDumpHunterStrategy:
                 msg = (
                     f"🩸 <b>[ОХОТНИК ЗА СКВИЗАМИ — ВЫКУП ПРОЛИВА]</b>\n"
                     f"🪙 <b>Пара:</b> <code>{symbol}</code> (ЛОНГ на отскок)\n"
-                    f"📉 <b>Пролив:</b> Импульсный слив на <code>{drop_pct*100:.1f}%</code> с выкупом фитиля\n"
+                    f"📉 <b>Пролив:</b> Импульсный слив на <code>{drop_pct*100:.1f}%</code> с выкупом фитиля ≥50%\n"
                     f"💵 <b>Цена входа:</b> <code>{p_fmt}</code> | Объем: $15\n"
-                    f"🎯 <b>Цель V-отскока:</b> <code>{tp_fmt}</code> (+2.8%) | 🛡 <b>SL:</b> <code>{sl_fmt}</code> (-2.0%)\n"
+                    f"🎯 <b>Цель V-отскока:</b> <code>{tp_fmt}</code> (+{tp_target_pct*100:.1f}%) | 🛡 <b>SL:</b> <code>{sl_fmt}</code> (-2.0%)\n"
                     f"💰 <b>Банк стратегии:</b> <code>${self.portfolio.cash:.2f}</code>"
                 )
                 await notifier.send_message(msg, parse_mode="HTML")

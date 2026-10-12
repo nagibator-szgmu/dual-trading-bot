@@ -9,13 +9,13 @@ class GridStrategy:
     def __init__(self, portfolio: StrategyPortfolio):
         self.portfolio = portfolio
         self.name = "2. Спотовая Сетка (Trend-Hedged Grid)"
-        self.grid_step_pct = 0.02  # 2.0% optimized step (Sharpe 6.15)
+        self.grid_step_pct = 0.025  # 2.5% widened step to preserve cash and prevent inventory trap
         self.level_size = 10.0     # $10 per level
         self.max_levels_per_symbol = 3
         self.last_grid_action_price: Dict[str, float] = {}
 
     async def update(self, symbol: str, current_price: float, candles: List[Dict[str, float]]):
-        # 1. Check existing positions for grid TP (price rose by >= 2.0% above entry)
+        # 1. Check existing positions for grid TP (price rose by >= 2.5% above entry)
         to_close = []
         for pid, pos in list(self.portfolio.positions.items()):
             if pos["symbol"] != symbol:
@@ -24,7 +24,7 @@ class GridStrategy:
             profit_target = entry * (1.0 + self.grid_step_pct)
             
             if current_price >= profit_target:
-                to_close.append((pid, current_price, "Сетка: исполнен уровень продажи (+2.0%)"))
+                to_close.append((pid, current_price, f"Сетка: исполнен уровень продажи (+{self.grid_step_pct*100:.1f}%)"))
 
         for pid, exit_px, reason in to_close:
             res = self.portfolio.close_position(pid, exit_px, reason)
@@ -83,7 +83,7 @@ class GridStrategy:
                     f"🧺 <b>[СЕТКА GRID — ПОКУПКА УРОВНЯ]</b>\n"
                     f"🪙 <b>Пара:</b> <code>{symbol}</code>\n"
                     f"💵 <b>Цена покупки:</b> <code>${current_price:.2f}</code>\n"
-                    f"🎯 <b>Цель продажи:</b> <code>${round(current_price * (1.0 + self.grid_step_pct), 2):.2f}</code> (+1.0%)\n"
+                    f"🎯 <b>Цель продажи:</b> <code>${round(current_price * (1.0 + self.grid_step_pct), 2):.2f}</code> (+{self.grid_step_pct*100:.1f}%)\n"
                     f"💰 <b>Размер уровня:</b> <code>${self.level_size:.2f}</code> | Свободно: <code>${self.portfolio.cash:.2f}</code>"
                 )
                 await notifier.send_message(msg, parse_mode="HTML")

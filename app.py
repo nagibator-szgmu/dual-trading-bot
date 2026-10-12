@@ -17,6 +17,7 @@ from strategies.squeeze_strategy import VolatilitySqueezeStrategy
 from strategies.adaptive_grid_strategy import AdaptiveGridStrategy
 from strategies.dump_hunter_strategy import FlashDumpHunterStrategy
 from strategies.hyper_cascade_strategy import HyperCascadeSniperStrategy
+from strategies.poc_pullback_strategy import POCPullbackStrategy
 from core.cs2_notifier import cs2_notifier
 from core.cs2_sniper import cs2_sniper
 
@@ -46,11 +47,12 @@ strat_squeeze = VolatilitySqueezeStrategy(tournament.strat_squeeze)
 strat_adaptive_grid = AdaptiveGridStrategy(tournament.strat_adaptive_grid)
 strat_dump_hunter = FlashDumpHunterStrategy(tournament.strat_dump_hunter)
 strat_cascade = HyperCascadeSniperStrategy(tournament.strat_cascade)
+strat_poc = POCPullbackStrategy(tournament.strat_poc)
 
 live_prices = {}
 is_running = True
 
-async def fetch_candles(symbol: str, bar: str = "15m", limit: int = 40):
+async def fetch_candles(symbol: str, bar: str = "15m", limit: int = 100):
     url = "https://www.okx.com/api/v5/market/candles"
     params = {"instId": symbol, "bar": bar, "limit": str(limit)}
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -94,7 +96,8 @@ async def market_loop():
                     strat_squeeze.update(symbol, current_price, candles),
                     strat_adaptive_grid.update(symbol, current_price, candles),
                     strat_dump_hunter.update(symbol, current_price, candles),
-                    strat_cascade.update(symbol, current_price, candles)
+                    strat_cascade.update(symbol, current_price, candles),
+                    strat_poc.update(symbol, current_price, candles)
                 )
 
             tournament.save()
@@ -125,14 +128,15 @@ async def telegram_command_listener():
                             if text in ["/start", "старт"]:
                                 reply = (
                                     "👋 <b>Добро пожаловать в турнир Торговых Алгоритмов 24/7!</b>\n\n"
-                                    "В этом боте 7 независимых алгоритмических стратегий соревнуются на реальном рынке криптовалют (BTC / ETH / SOL / DOGE) с равным бюджетом $100 каждая ($700 суммарно):\n"
+                                    "В этом боте 8 независимых алгоритмических стратегий соревнуются на реальном рынке криптовалют (BTC / ETH / SOL / DOGE) с равным бюджетом $100 каждая ($800 суммарно):\n"
                                     "1. ⚡ <b>Long-Only Трендовый пробой</b> (Donchian + EMA50)\n"
-                                    "2. 🕸️ <b>Спотовая Сетка</b> (Trend-Hedged Grid 2.0%)\n"
-                                    "3. 🌊 <b>Возврат к средней</b> (RSI + Bollinger Bands)\n"
+                                    "2. 🕸️ <b>Спотовая Сетка</b> (Trend-Hedged Grid 2.5%)\n"
+                                    "3. 🌊 <b>Возврат к средней</b> (RSI(14) + BB 0.997σ + Vol 1.1x)\n"
                                     "4. 💥 <b>Квантовая Пружина</b> (ATR Volatility Squeeze Breakout)\n"
-                                    "5. 📐 <b>Адаптивная Сетка</b> (ATR Dynamic Step Grid)\n"
-                                    "6. 🎯 <b>Охотник за сквизами</b> (Flash Dump & Liquidation Hunter)\n"
-                                    "7. 🚀 <b>HyperCascade Sniper</b> (Anti-Martingale Пирамидинг & Пампы)\n\n"
+                                    "5. 📐 <b>Адаптивная Сетка</b> (ATR Dynamic Step Grid 2.1x)\n"
+                                    "6. 🎯 <b>Охотник за сквизами</b> (Flash Dump & Liquidation Hunter Wick 50%)\n"
+                                    "7. 🚀 <b>HyperCascade Sniper</b> (Anti-Martingale Пирамидинг & Пампы)\n"
+                                    "8. 📊 <b>POC Pullback Sniper</b> (Volume Profile Point-of-Control Rebound)\n\n"
                                     "📊 <b>Команды:</b>\n"
                                     "• /status или /leaderboard — текущий баланс, PnL и рейтинг\n"
                                     "• /trades — детальный список открытых сделок\n"
@@ -145,7 +149,7 @@ async def telegram_command_listener():
                                 summary = tournament.get_summary(live_prices)
                                 lb = tournament.get_leaderboard(live_prices)
                                 table_data = []
-                                medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
+                                medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣"]
                                 for i, s in enumerate(lb):
                                     pnl_sign = "+" if s['total_pnl'] >= 0 else ""
                                     medal = medals[i] if i < len(medals) else f"#{i+1}"
@@ -180,7 +184,8 @@ async def telegram_command_listener():
                                     ("💥 Volatility Squeeze", tournament.strat_squeeze),
                                     ("📐 Adaptive Grid", tournament.strat_adaptive_grid),
                                     ("🎯 Flash Dump Hunter", tournament.strat_dump_hunter),
-                                    ("🚀 HyperCascade Sniper", tournament.strat_cascade)
+                                    ("🚀 HyperCascade Sniper", tournament.strat_cascade),
+                                    ("📊 POC Pullback Sniper", tournament.strat_poc)
                                 ]:
                                     if strat.positions:
                                         has_trades = True
@@ -267,7 +272,7 @@ def generate_dashboard_html():
     summary = tournament.get_summary(live_prices)
 
     rows_html = ""
-    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"]
+    medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣"]
     for i, s in enumerate(lb):
         pnl_color = "#34d399" if s['total_pnl'] >= 0 else "#f87171"
         pnl_str = f"+${s['total_pnl']:.2f}" if s['total_pnl'] >= 0 else f"-${abs(s['total_pnl']):.2f}"
@@ -612,7 +617,7 @@ ensure_background_services()
 
 with gr.Blocks(title="🏆 Crypto & CS2 Quant Trading Platform") as demo:
     with gr.Tabs():
-        with gr.Tab("🏆 Крипто-Турнир (7 Стратегий)"):
+        with gr.Tab("🏆 Крипто-Турнир (8 Стратегий)"):
             crypto_ui = gr.HTML(value=generate_dashboard_html)
         with gr.Tab("🔫 CS2 Skin Sniper ($200 Инвентарь)"):
             cs2_ui = gr.HTML(value=generate_cs2_dashboard_html)
