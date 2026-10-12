@@ -48,6 +48,12 @@ class GridStrategy:
         if self.portfolio.cash < self.level_size:
             return
 
+        # Deep waterfall crash protection: if price dropped > 7.5% from highest active entry, freeze secondary dip levels
+        if active_pos_for_sym:
+            highest_entry = max(p["entry"] for p in active_pos_for_sym)
+            if current_price < highest_entry * 0.925:
+                return
+
         # Trend-Hedge: if price is heavily below short-term EMA, freeze adding dip levels to prevent catching falling knives
         if candles and len(candles) >= 20 and active_pos_for_sym:
             closes = [c["close"] for c in candles]

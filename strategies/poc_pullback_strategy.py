@@ -94,7 +94,9 @@ class POCPullbackStrategy:
                 )
                 await notifier.send_message(be_msg, parse_mode="HTML")
             elif pos.get("breakeven") and atr14 > 0:
-                trail_sl = self.round_price(current_price - 0.7 * atr14)
+                # Stage 2: Tightened trailing 0.5 ATR on strong profit (>= +2.0%), otherwise 0.7 ATR
+                mult = 0.5 if current_price >= entry * 1.020 else 0.7
+                trail_sl = self.round_price(current_price - mult * atr14)
                 if trail_sl > pos.get("stop_loss", 0):
                     pos["stop_loss"] = trail_sl
                     sl = trail_sl
@@ -152,9 +154,9 @@ class POCPullbackStrategy:
         # Pullback zone: current price is testing the POC support level from above (+0.8% to -0.4%)
         is_at_poc = (poc_price * 0.996 <= current_price <= poc_price * 1.008)
 
-        # Check that market broke above POC previously
+        # Check that market broke cleanly above POC previously (at least 1.0% breakout to prevent chop near POC)
         recent_highs = [c["high"] for c in candles[-15:]]
-        had_breakout = max(recent_highs) >= poc_price * 1.006
+        had_breakout = max(recent_highs) >= poc_price * 1.010
 
         if is_at_poc and had_breakout and vol_ok and bull_candle:
             sl = self.round_price(min(current_price * (1.0 - self.stop_loss_pct), poc_price - 1.1 * atr14))

@@ -104,8 +104,9 @@ class MeanReversionStrategy:
                 )
                 await notifier.send_message(be_msg, parse_mode="HTML")
             elif pos.get("breakeven") and atr14 > 0:
-                # Dynamic ATR trailing stop: 0.7 * ATR behind price
-                trail_sl = self.round_price(current_price - 0.7 * atr14)
+                # Stage 2: Tightened trailing 0.5 ATR on strong profit (>= +2.0%), otherwise 0.7 ATR
+                mult = 0.5 if current_price >= entry * 1.020 else 0.7
+                trail_sl = self.round_price(current_price - mult * atr14)
                 if trail_sl > pos.get("stop_loss", 0):
                     pos["stop_loss"] = trail_sl
                     sl = trail_sl

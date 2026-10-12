@@ -129,8 +129,18 @@ class CS2SkinSniper:
             vol_30 = last_30.get("volume") or 0
             avg_30 = last_30.get("avg")
 
-            # Mathematical liquidity filter: require verified volume over last 30 days
-            if vol_30 < config.CS2_MIN_SALES_LAST_30D or not avg_30 or avg_30 <= 0:
+            last_7 = hist.get("last_7_days") or {}
+            vol_7 = last_7.get("volume") or 0
+
+            # Mathematical liquidity & velocity filter:
+            # 1. Minimum 30d volume
+            # 2. Turnover velocity: average interval between sales <= 48h
+            # 3. Active recent trading: at least 3 sales in last 7 days
+            hours_between_sales = (30 * 24) / vol_30 if vol_30 > 0 else 999.0
+            if (vol_30 < config.CS2_MIN_SALES_LAST_30D or 
+                hours_between_sales > config.CS2_MAX_AVG_HOURS_BETWEEN_SALES or 
+                vol_7 < config.CS2_MIN_SALES_LAST_7D or 
+                not avg_30 or avg_30 <= 0):
                 continue
 
             # Conservative valuation: minimum between actual 30d transaction avg and algorithmic suggested price

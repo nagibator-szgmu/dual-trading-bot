@@ -68,6 +68,12 @@ class AdaptiveGridStrategy:
         if self.portfolio.cash < self.level_size:
             return
 
+        # Deep waterfall crash protection: if price dropped > 8.0% from highest active entry, freeze secondary dip levels
+        if active_pos_for_sym:
+            highest_entry = max(p["entry"] for p in active_pos_for_sym)
+            if current_price < highest_entry * 0.920:
+                return
+
         # Trend safety: if price is below EMA25, don't open secondary levels to prevent catching deep waterfall crashes
         if len(candles) >= 25 and active_pos_for_sym:
             closes = [c["close"] for c in candles]

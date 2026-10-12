@@ -18,9 +18,23 @@ class TrendStrategy:
     def round_price(self, px: float) -> float:
         return round(px, 4 if px < 10.0 else 2)
 
+    def calculate_atr(self, candles: List[Dict[str, float]], period: int = 14) -> float:
+        if len(candles) < period + 1:
+            return 0.0
+        trs = []
+        for i in range(len(candles) - period, len(candles)):
+            h = candles[i]["high"]
+            l = candles[i]["low"]
+            c_prev = candles[i - 1]["close"]
+            tr = max(h - l, abs(h - c_prev), abs(l - c_prev))
+            trs.append(tr)
+        return sum(trs) / period
+
     async def update(self, symbol: str, current_price: float, candles: List[Dict[str, float]]):
         if len(candles) < 25:
             return
+
+        atr14 = self.calculate_atr(candles, period=14)
 
         # 1. Check existing positions for SL / TP
         to_close = []
@@ -32,10 +46,10 @@ class TrendStrategy:
             sl = pos.get("stop_loss")
             tp = pos.get("take_profit")
 
-            # Breakeven Trailing: when profit reaches +1.5%, lock SL at entry + 0.2% (zero risk + fee coverage)
+            # Breakeven Trailing: when profit reaches +1.5%, lock SL at entry + 0.5% (fee coverage + profit lock)
             if not pos.get("breakeven"):
                 if side == "BUY" and current_price >= entry * 1.015:
-                    new_sl = self.round_price(entry * 1.002)
+                    new_sl = self.round_price(entry * 1.005)
                     pos["stop_loss"] = new_sl
                     pos["breakeven"] = True
                     sl = new_sl
@@ -43,28 +57,23 @@ class TrendStrategy:
                         f"🛡 <b>[ТРЕНД 1H — ПЕРЕВОД В БЕЗУБЫТОК]</b>\n"
                         f"🪙 <b>Пара:</b> <code>{symbol}</code> (BUY)\n"
                         f"🎯 <b>Вход:</b> <code>${entry:.4f if entry < 10 else entry:.2f}</code> ➔ <b>Тек:</b> <code>${current_price:.4f if current_price < 10 else current_price:.2f}</code> (+1.5%)\n"
-                        f"🔒 <b>Новый Стоп-Лосс:</b> <code>${new_sl:.4f if new_sl < 10 else new_sl:.2f}</code> (гарантия нулевого риска)"
+                        f"🔒 <b>Новый Стоп-Лосс:</b> <code>${new_sl:.4f if new_sl < 10 else new_sl:.2f}</code> (гарантия прибыли +0.5%)"
                     )
                     await notifier.send_message(be_msg, parse_mode="HTML")
-                elif side == "SELL" and current_price <= entry * 0.985:
-                    new_sl = round(entry * 0.998, 2)
-                    pos["stop_loss"] = new_sl
-                    pos["breakeven"] = True
-                    sl = new_sl
-                    be_msg = (
-                        f"🛡 <b>[ТРЕНД 1H — ПЕРЕВОД В БЕЗУБЫТОК]</b>\n"
-                        f"🪙 <b>Пара:</b> <code>{symbol}</code> (SELL)\n"
-                        f"🎯 <b>Вход:</b> <code>${entry:.2f}</code> ➔ <b>Тек:</b> <code>${current_price:.2f}</code> (+1.5%)\n"
-                        f"🔒 <b>Новый Стоп-Лосс:</b> <code>${new_sl:.2f}</code> (гарантия нулевого риска)"
-                    )
-                    await notifier.send_message(be_msg, parse_mode="HTML")
+            elif pos.get("breakeven") and atr14 > 0:
+                # Stage 2: Dynamic trailing 0.8 ATR when profit >= +2.5%
+                if current_price >= entry * 1.025:
+                    trail_sl = self.round_price(current_price - 0.8 * atr14)
+                    if trail_sl > pos.get("stop_loss", 0):
+                        pos["stop_loss"] = trail_sl
+                        sl = trail_sl
 
             if side == "BUY":
                 if sl and current_price <= sl:
-                    reason = "Безубыток (+0.2%)" if pos.get("breakeven") and current_price >= entry else "Стоп-лосс (-2.0%)"
+                    reason = f"Безубыток/Трейлинг (+{(current_price-entry)/entry*100:.1f}%)" if pos.get("breakeven") and current_price >= entry else "Стоп-лосс (-2.0%)"
                     to_close.append((pid, current_price, reason))
                 elif tp and current_price >= tp:
-                    to_close.append((pid, current_price, "Тейк-профит (+6.0%)"))
+                    to_close.append((pid, current_price, "Тейк-профит тренда (+6.0%)"))
             elif side == "SELL":
                 if sl and current_price >= sl:
                     reason = "Безубыток (+0.2%)" if pos.get("breakeven") and current_price <= entry else "Стоп-лосс (-2.0%)"

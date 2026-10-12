@@ -27,8 +27,9 @@ class Config:
     CS2_MIN_DISCOUNT_PCT: float = 15.0  # minimum 15% discount below real average sales price
     CS2_MIN_PROFIT_PCT: float = 8.0     # minimum 8% net profit after real 8% fees
     CS2_MIN_ITEM_PRICE: float = 4.0     # skip 5-cent graffiti
-    CS2_MAX_ITEM_PRICE: float = 45.0    # keep diversified portfolio of items
     CS2_MIN_SALES_LAST_30D: int = 15    # strict liquidity filter: at least 15 real sales in last 30 days
+    CS2_MAX_AVG_HOURS_BETWEEN_SALES: float = 48.0  # turnover velocity: avg <= 48h between sales
+    CS2_MIN_SALES_LAST_7D: int = 3      # active recent trading: at least 3 sales in last 7 days
     CS2_FEE_PCT: float = 0.08           # Skinport real standard seller fee (8%)
 
 config = Config()
