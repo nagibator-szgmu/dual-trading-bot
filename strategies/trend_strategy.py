@@ -125,6 +125,14 @@ class TrendStrategy:
             tp = self.round_price(current_price * (1.0 + self.take_profit_pct))
 
         if signal:
+            inds = {
+                "ema_10": round(ema_fast, 4),
+                "ema_25": round(ema_slow, 4),
+                "donchian_high_20": round(highest_prev, 4),
+                "atr_14": round(atr14, 4),
+                "atr_percent": round(atr14 / current_price * 100, 2),
+                "volatility_regime": "normal" if (atr14 / current_price) < 0.02 else "high"
+            }
             trade_id = self.portfolio.open_position(
                 symbol=symbol,
                 side=signal,
@@ -132,7 +140,8 @@ class TrendStrategy:
                 amount_usd=self.position_size,
                 stop_loss=sl,
                 take_profit=tp,
-                strategy_detail="Donchian Breakout + EMA (Long-Only)"
+                strategy_detail="Donchian Breakout + EMA (Long-Only)",
+                indicators=inds
             )
             if trade_id:
                 side_emoji = "🚀 ЛОНГ" if signal == "BUY" else "🔻 ШОРТ"

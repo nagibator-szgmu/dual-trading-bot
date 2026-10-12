@@ -149,6 +149,13 @@ class HyperCascadeSniperStrategy:
             sl = round(current_price * (1.0 - self.initial_sl_pct), 4)
             tp = round(current_price * 1.09, 4)
 
+            inds = {
+                "volume_ratio": round(vol_ratio, 2),
+                "donchian_high_20": round(highest_close, 4),
+                "is_pyramid_add": False,
+                "pyramid_level": 1,
+                "volatility_regime": "cascade_pump"
+            }
             trade_id = self.portfolio.open_position(
                 symbol=symbol,
                 side="BUY",
@@ -156,7 +163,8 @@ class HyperCascadeSniperStrategy:
                 amount_usd=self.stage1_size,
                 stop_loss=sl,
                 take_profit=tp,
-                strategy_detail=f"HyperCascade Breakout (Vol={vol_ratio:.1f}x)"
+                strategy_detail=f"HyperCascade Breakout (Vol={vol_ratio:.1f}x)",
+                indicators=inds
             )
             if trade_id:
                 # Add stage metadata to position

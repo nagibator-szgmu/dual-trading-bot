@@ -161,6 +161,14 @@ class POCPullbackStrategy:
         if is_at_poc and had_breakout and vol_ok and bull_candle:
             sl = self.round_price(min(current_price * (1.0 - self.stop_loss_pct), poc_price - 1.1 * atr14))
             tp = self.round_price(max(current_price * 1.022, current_price + 2.0 * atr14))
+            dist_poc = round((current_price - poc_price) / poc_price * 100, 2)
+            inds = {
+                "distance_to_poc_percent": dist_poc,
+                "atr_14": round(atr14, 4),
+                "atr_percent": round(atr14 / current_price * 100, 2),
+                "volume_ratio": round(curr_vol / vol_sma20, 2) if vol_sma20 > 0 else 1.0,
+                "volatility_regime": "normal" if (atr14 / current_price) < 0.02 else "high"
+            }
             trade_id = self.portfolio.open_position(
                 symbol=symbol,
                 side="BUY",
@@ -168,7 +176,8 @@ class POCPullbackStrategy:
                 amount_usd=self.position_size,
                 stop_loss=sl,
                 take_profit=tp,
-                strategy_detail=f"Volume Profile POC Pullback (POC=${poc_price:.2f})"
+                strategy_detail=f"Volume Profile POC Pullback (POC=${poc_price:.2f})",
+                indicators=inds
             )
             if trade_id:
                 p_fmt = f"${current_price:.4f}" if current_price < 10 else f"${current_price:.2f}"

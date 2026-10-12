@@ -72,7 +72,7 @@ class FlashDumpHunterStrategy:
         # Target TP: +2.2% on standard rebound, +3.2% if explosive volume
         target_tp = 0.032 if vol_ratio >= 3.5 else 0.022
         
-        return is_dump, drop_from_high, target_tp
+        return is_dump, drop_from_high, target_tp, wick_ratio, vol_ratio
 
     async def update(self, symbol: str, current_price: float, candles: List[Dict[str, float]]):
         if len(candles) < 25:
@@ -145,10 +145,17 @@ class FlashDumpHunterStrategy:
             return
 
         # 3. Detect flash dump liquidation spike
-        is_dump, drop_pct, tp_target_pct = self.detect_liquidation_wick(candles)
+        is_dump, drop_pct, tp_target_pct, wick_r, vol_r = self.detect_liquidation_wick(candles)
         if is_dump:
             sl = self.round_price(current_price * (1.0 - self.stop_loss_pct))
             tp = self.round_price(current_price * (1.0 + tp_target_pct))
+            inds = {
+                "wick_ratio": round(wick_r, 2),
+                "drop_pct": round(drop_pct * 100, 2),
+                "volume_ratio": round(vol_r, 2),
+                "atr_14": round(atr14, 4),
+                "volatility_regime": "high"
+            }
             trade_id = self.portfolio.open_position(
                 symbol=symbol,
                 side="BUY",
@@ -156,7 +163,8 @@ class FlashDumpHunterStrategy:
                 amount_usd=self.position_size,
                 stop_loss=sl,
                 take_profit=tp,
-                strategy_detail=f"Flash Dump Wick Rebound (-{drop_pct*100:.1f}%)"
+                strategy_detail=f"Flash Dump Wick Rebound (-{drop_pct*100:.1f}%)",
+                indicators=inds
             )
             if trade_id:
                 p_fmt = f"${current_price:.4f}" if current_price < 10 else f"${current_price:.2f}"

@@ -92,6 +92,14 @@ class AdaptiveGridStrategy:
                 should_buy = True
 
         if should_buy:
+            lvl = len(active_pos_for_sym) + 1
+            inds = {
+                "atr_14": round(atr14, 4),
+                "atr_percent": round(atr_pct * 100, 2),
+                "is_pyramid_add": lvl > 1,
+                "pyramid_level": lvl,
+                "volatility_regime": "adaptive_grid"
+            }
             trade_id = self.portfolio.open_position(
                 symbol=symbol,
                 side="BUY",
@@ -99,7 +107,8 @@ class AdaptiveGridStrategy:
                 amount_usd=self.level_size,
                 stop_loss=None,
                 take_profit=round(current_price * (1.0 + dynamic_step), 2),
-                strategy_detail=f"Adaptive Grid Level {len(active_pos_for_sym)+1} (Step={dynamic_step*100:.1f}%)"
+                strategy_detail=f"Adaptive Grid Level {lvl} (Step={dynamic_step*100:.1f}%)",
+                indicators=inds
             )
             if trade_id:
                 self.portfolio.positions[trade_id]["step_pct"] = dynamic_step

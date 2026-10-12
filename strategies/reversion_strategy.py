@@ -154,6 +154,14 @@ class MeanReversionStrategy:
             sl = self.round_price(current_price * (1.0 - self.stop_loss_pct))
             # Guaranteed TP >= +2.0%, or return to SMA + 0.3%
             tp = self.round_price(max(sma * 1.003, current_price * 1.020))
+            inds = {
+                "rsi_14": round(rsi, 2),
+                "atr_14": round(atr14, 4),
+                "atr_percent": round(atr14 / current_price * 100, 2),
+                "volume_ratio": round(curr_vol / vol_sma20, 2) if vol_sma20 > 0 else 1.0,
+                "bb_position": round((current_price - lower_bb) / (upper_bb - lower_bb), 2) if upper_bb > lower_bb else 0.0,
+                "volatility_regime": "normal" if (atr14 / current_price) < 0.02 else "high"
+            }
             trade_id = self.portfolio.open_position(
                 symbol=symbol,
                 side="BUY",
@@ -161,7 +169,8 @@ class MeanReversionStrategy:
                 amount_usd=self.position_size,
                 stop_loss=sl,
                 take_profit=tp,
-                strategy_detail=f"Oversold Bounce (RSI={rsi:.1f}, BB-Break)"
+                strategy_detail=f"Oversold Bounce (RSI={rsi:.1f}, BB-Break)",
+                indicators=inds
             )
             if trade_id:
                 p_fmt = f"${current_price:.4f}" if current_price < 10 else f"${current_price:.2f}"

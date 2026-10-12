@@ -155,6 +155,12 @@ class VolatilitySqueezeStrategy:
             sl = self.round_price(current_price * (1.0 - self.stop_loss_pct))
             tp = self.round_price(current_price * (1.0 + self.take_profit_pct))
             
+            inds = {
+                "bb_position": round((current_price - ind["lower_bb"]) / (ind["upper_bb"] - ind["lower_bb"]), 2) if ind["upper_bb"] > ind["lower_bb"] else 1.0,
+                "atr_14": round(ind["atr14"], 4),
+                "atr_percent": round(ind["atr14"] / current_price * 100, 2),
+                "volatility_regime": "squeeze" if ind["is_squeezed"] else "breakout"
+            }
             trade_id = self.portfolio.open_position(
                 symbol=symbol,
                 side="BUY",
@@ -162,7 +168,8 @@ class VolatilitySqueezeStrategy:
                 amount_usd=self.position_size,
                 stop_loss=sl,
                 take_profit=tp,
-                strategy_detail=f"Squeeze Breakout (ATR={ind['atr14']:.2f})"
+                strategy_detail=f"Squeeze Breakout (ATR={ind['atr14']:.2f})",
+                indicators=inds
             )
             if trade_id:
                 p_fmt = f"${current_price:.4f}" if current_price < 10 else f"${current_price:.2f}"

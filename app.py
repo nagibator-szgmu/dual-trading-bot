@@ -89,6 +89,10 @@ async def market_loop():
                 current_price = candles[-1]["close"]
                 live_prices[symbol] = current_price
 
+                # Update real-time position tracking metrics (MFE, MAE, bars held)
+                for s in tournament.strategies:
+                    s.update_position_metrics(symbol, current_price)
+
                 await asyncio.gather(
                     strat_trend.update(symbol, current_price, candles),
                     strat_grid.update(symbol, current_price, candles),
@@ -101,6 +105,7 @@ async def market_loop():
                 )
 
             tournament.save()
+            tournament.record_snapshot(live_prices)
         except Exception as e:
             logger.error(f"Error in market_loop: {e}")
         await asyncio.sleep(config.SCAN_INTERVAL)
@@ -213,16 +218,24 @@ async def telegram_command_listener():
                                     await notifier.send_message("⛔ Доступ ограничен. Выгрузка базы данных доступна только администратору.", chat_id=chat_id)
                                     continue
 
-                                csv_file = tournament.export_csv("tournament_trades.csv")
-                                json_file = "portfolio_state.json"
                                 tournament.save()
+                                csv_file = tournament.export_csv("tournament_trades.csv")
+                                snap_file = tournament.export_snapshots_csv("snapshots.csv")
+                                sig_file = tournament.export_signals_csv("signals.csv")
+                                json_file = "portfolio_state.json"
 
                                 caption = (
-                                    "📊 <b>Экспорт данных турнира для AI-анализа:</b>\n\n"
-                                    "• Файл <code>tournament_trades.csv</code> — плоская таблица всех сделок (Excel / Pandas / ChatGPT Code Interpreter).\n"
-                                    "• Загрузи этот файл в любой AI (Claude / ChatGPT / DeepSeek) для анализа метрик и оптимизации параметров!"
+                                    "📊 <b>Экспорт данных турнира (Полный Квант-Пакет):</b>\n\n"
+                                    "1️⃣ <code>tournament_trades.csv</code> — 47 параметров по каждой сделке (MFE/MAE, R:R, комиссии, индикаторы входа, причины выхода).\n"
+                                    "2️⃣ <code>snapshots.csv</code> — временной ряд эквити, кэша и просадок от пика (Drawdown from peak).\n"
+                                    "3️⃣ <code>signals.csv</code> — лог всех рыночных сигналов и фильтров отсева.\n"
+                                    "4️⃣ <code>portfolio_state.json</code> — сырой снимок состояния системы."
                                 )
                                 await notifier.send_document(csv_file, chat_id=chat_id, caption=caption)
+                                if os.path.exists(snap_file):
+                                    await notifier.send_document(snap_file, chat_id=chat_id, caption="📈 <code>snapshots.csv</code> — кривые доходности и просадок по стратегиям.")
+                                if os.path.exists(sig_file):
+                                    await notifier.send_document(sig_file, chat_id=chat_id, caption="⚡ <code>signals.csv</code> — диагностика срабатывания сигналов.")
                                 if os.path.exists(json_file):
                                     await notifier.send_document(json_file, chat_id=chat_id, caption="🗄️ <code>portfolio_state.json</code> — полный сырой JSON-дамп состояния турнира.")
 

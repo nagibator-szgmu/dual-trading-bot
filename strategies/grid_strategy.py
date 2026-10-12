@@ -74,6 +74,11 @@ class GridStrategy:
                 should_buy = True
 
         if should_buy:
+            lvl = len(active_pos_for_sym) + 1
+            inds = {
+                "is_pyramid_add": lvl > 1,
+                "pyramid_level": lvl
+            }
             trade_id = self.portfolio.open_position(
                 symbol=symbol,
                 side="BUY",
@@ -81,7 +86,8 @@ class GridStrategy:
                 amount_usd=self.level_size,
                 stop_loss=None,  # Spot Grid doesn't use tight stop loss (holds actual coin)
                 take_profit=round(current_price * (1.0 + self.grid_step_pct), 2),
-                strategy_detail=f"Spot Grid Level {len(active_pos_for_sym)+1}"
+                strategy_detail=f"Spot Grid Level {lvl}",
+                indicators=inds
             )
             if trade_id:
                 self.last_grid_action_price[symbol] = current_price
