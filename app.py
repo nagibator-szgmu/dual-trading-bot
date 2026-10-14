@@ -134,9 +134,10 @@ async def telegram_command_listener():
                             if "@" in cmd:
                                 cmd = cmd.split("@")[0]
                             chat_id = str(msg.get("chat", {}).get("id", ""))
-                            if chat_id:
-                                notifier.chat_id = chat_id
-                                config.TELEGRAM_CHAT_ID = chat_id
+                            is_admin = (str(chat_id) == str(config.TELEGRAM_CHAT_ID)) or (str(chat_id) == "5579630526")
+                            if not is_admin:
+                                await notifier.send_message("🔒 Доступ ограничен. Бот находится в приватном режиме владельца.", chat_id=chat_id)
+                                continue
 
                             if cmd in ["/start", "старт"]:
                                 reply = (
@@ -516,10 +517,10 @@ async def cs2_telegram_command_listener():
                             if "@" in cmd:
                                 cmd = cmd.split("@")[0]
                             chat_id = str(msg.get("chat", {}).get("id", ""))
-                            if chat_id:
-                                cs2_notifier.set_default_chat_id(chat_id)
-
-                            is_admin = (not config.TELEGRAM_CHAT_ID) or (str(chat_id) == str(config.TELEGRAM_CHAT_ID)) or (str(chat_id) == "5579630526")
+                            is_admin = (str(chat_id) == str(config.TELEGRAM_CHAT_ID)) or (str(chat_id) == "5579630526")
+                            if not is_admin:
+                                await cs2_notifier.send_message("🔒 Доступ ограничен. CS2 Снайпер находится в приватном режиме владельца.", chat_id=chat_id)
+                                continue
 
                             if cmd in ["/start", "старт"]:
                                 reply = (

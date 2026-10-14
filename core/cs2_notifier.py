@@ -11,9 +11,8 @@ class CS2TelegramNotifier:
         self.default_chat_id = config.TELEGRAM_CHAT_ID
 
     def set_default_chat_id(self, chat_id: str):
-        if chat_id:
+        if chat_id and (str(chat_id) == str(config.TELEGRAM_CHAT_ID) or str(chat_id) == "5579630526"):
             self.default_chat_id = str(chat_id)
-            config.TELEGRAM_CHAT_ID = str(chat_id)
 
     async def send_message(self, text: str, chat_id: Optional[str] = None, parse_mode: str = "HTML") -> bool:
         target_chat = chat_id or self.default_chat_id
