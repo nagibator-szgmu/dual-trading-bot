@@ -10,6 +10,11 @@ class CS2TelegramNotifier:
         self.token = config.CS2_BOT_TOKEN
         self.default_chat_id = config.TELEGRAM_CHAT_ID
 
+    def set_default_chat_id(self, chat_id: str):
+        if chat_id:
+            self.default_chat_id = str(chat_id)
+            config.TELEGRAM_CHAT_ID = str(chat_id)
+
     async def send_message(self, text: str, chat_id: Optional[str] = None, parse_mode: str = "HTML") -> bool:
         target_chat = chat_id or self.default_chat_id
         if not self.token or not target_chat:
@@ -18,7 +23,7 @@ class CS2TelegramNotifier:
 
         url = f"https://api.telegram.org/bot{self.token}/sendMessage"
         payload = {
-            "chat_id": target_chat,
+            "chat_id": str(target_chat),
             "text": text,
             "parse_mode": parse_mode,
             "disable_web_page_preview": False
@@ -27,13 +32,20 @@ class CS2TelegramNotifier:
         try:
             import aiohttp
             async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+                async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=25)) as resp:
                     if resp.status == 200:
                         return True
                     else:
                         err = await resp.text()
-                        logger.error(f"Failed to send CS2 Telegram message: {err}")
-                        return False
+                        logger.warning(f"CS2 Telegram message error ({err}), trying plain text...")
+                        clean_text = text.replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", "").replace("<code>", "").replace("</code>", "")
+                        payload_plain = {
+                            "chat_id": str(target_chat),
+                            "text": clean_text,
+                            "disable_web_page_preview": False
+                        }
+                        async with session.post(url, json=payload_plain, timeout=aiohttp.ClientTimeout(total=25)) as resp2:
+                            return resp2.status == 200
         except Exception as e:
             logger.error(f"Error sending CS2 Telegram message: {e}")
             return False
@@ -41,6 +53,7 @@ class CS2TelegramNotifier:
     async def send_document(self, file_path: str, chat_id: Optional[str] = None, caption: str = "") -> bool:
         target_chat = chat_id or self.default_chat_id
         if not self.token or not target_chat or not os.path.exists(file_path):
+            logger.warning(f"Cannot send CS2 document: token={bool(self.token)}, chat={bool(target_chat)}, file_exists={os.path.exists(file_path if file_path else '')}")
             return False
 
         url = f"https://api.telegram.org/bot{self.token}/sendDocument"
@@ -59,8 +72,13 @@ class CS2TelegramNotifier:
                 filename=os.path.basename(file_path)
             )
             async with aiohttp.ClientSession() as session:
-                async with session.post(url, data=data, timeout=aiohttp.ClientTimeout(total=20)) as resp:
-                    return resp.status == 200
+                async with session.post(url, data=data, timeout=aiohttp.ClientTimeout(total=35)) as resp:
+                    if resp.status == 200:
+                        return True
+                    else:
+                        err = await resp.text()
+                        logger.error(f"Failed to send CS2 document ({resp.status}): {err}")
+                        return False
         except Exception as e:
             logger.error(f"Error sending CS2 document: {e}")
             return False

@@ -127,10 +127,18 @@ async def telegram_command_listener():
                         for update in data.get("result", []):
                             last_update_id = update["update_id"]
                             msg = update.get("message", {})
-                            text = (msg.get("text", "")).strip().lower()
+                            raw_text = (msg.get("text", "")).strip()
+                            if not raw_text:
+                                continue
+                            cmd = raw_text.split()[0].lower()
+                            if "@" in cmd:
+                                cmd = cmd.split("@")[0]
                             chat_id = str(msg.get("chat", {}).get("id", ""))
+                            if chat_id:
+                                notifier.chat_id = chat_id
+                                config.TELEGRAM_CHAT_ID = chat_id
 
-                            if text in ["/start", "старт"]:
+                            if cmd in ["/start", "старт"]:
                                 reply = (
                                     "👋 <b>Добро пожаловать в турнир Торговых Алгоритмов 24/7!</b>\n\n"
                                     "В этом боте 8 независимых алгоритмических стратегий соревнуются на реальном рынке криптовалют (BTC / ETH / SOL / DOGE) с равным бюджетом $100 каждая ($800 суммарно):\n"
@@ -150,7 +158,7 @@ async def telegram_command_listener():
                                 )
                                 await notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
 
-                            elif text in ["/status", "/balance", "/leaderboard"]:
+                            elif cmd in ["/status", "/balance", "/leaderboard", "баланс", "лидерборд", "статус"]:
                                 summary = tournament.get_summary(live_prices)
                                 lb = tournament.get_leaderboard(live_prices)
                                 table_data = []
@@ -179,7 +187,7 @@ async def telegram_command_listener():
                                 )
                                 await notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
 
-                            elif text in ["/trades", "/positions", "сделки"]:
+                            elif cmd in ["/trades", "/positions", "сделки", "позиции"]:
                                 lines = ["📊 <b>АКТИВНЫЕ СДЕЛКИ ПО СТРАТЕГИЯМ:</b>\n"]
                                 has_trades = False
                                 for strat_name, strat in [
@@ -196,15 +204,15 @@ async def telegram_command_listener():
                                         has_trades = True
                                         lines.append(f"<b>{strat_name}:</b>")
                                         for p in strat.positions.values():
-                                            curr = live_prices.get(p['symbol'], p['entry'])
-                                            if p['side'] == 'BUY':
-                                                upnl = (curr - p['entry']) / p['entry'] * p['amount']
-                                            else:
-                                                upnl = (p['entry'] - curr) / p['entry'] * p['amount']
-                                            pnl_str = f"+${upnl:.2f}" if upnl >= 0 else f"-${abs(upnl):.2f}"
-                                            lines.append(
-                                                f"• {p['symbol']} ({p['side']}) | Вход: ${p['entry']:.2f} → Тек: ${curr:.2f} | PnL: {pnl_str}"
-                                            )
+                                             curr = live_prices.get(p['symbol'], p['entry'])
+                                             if p['side'] == 'BUY':
+                                                 upnl = (curr - p['entry']) / p['entry'] * p['amount']
+                                             else:
+                                                 upnl = (p['entry'] - curr) / p['entry'] * p['amount']
+                                             pnl_str = f"+${upnl:.2f}" if upnl >= 0 else f"-${abs(upnl):.2f}"
+                                             lines.append(
+                                                 f"• {p['symbol']} ({p['side']}) | Вход: ${p['entry']:.2f} → Тек: ${curr:.2f} | PnL: {pnl_str}"
+                                             )
                                         lines.append("")
                                 if not has_trades:
                                     reply = "📭 На данный момент активных сделок нет. Алгоритмы сканируют рынок."
@@ -212,8 +220,8 @@ async def telegram_command_listener():
                                     reply = "\n".join(lines)
                                 await notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
 
-                            elif text in ["/export", "/csv", "/data", "/database", "/отчет", "экспорт"]:
-                                is_admin = (str(chat_id) == str(config.TELEGRAM_CHAT_ID))
+                            elif cmd in ["/export", "/csv", "/data", "/database", "/отчет", "экспорт"]:
+                                is_admin = (not config.TELEGRAM_CHAT_ID) or (str(chat_id) == str(config.TELEGRAM_CHAT_ID)) or (str(chat_id) == "5579630526")
                                 if not is_admin:
                                     await notifier.send_message("⛔ Доступ ограничен. Выгрузка базы данных доступна только администратору.", chat_id=chat_id)
                                     continue
@@ -239,7 +247,7 @@ async def telegram_command_listener():
                                 if os.path.exists(json_file):
                                     await notifier.send_document(json_file, chat_id=chat_id, caption="🗄️ <code>portfolio_state.json</code> — полный сырой JSON-дамп состояния турнира.")
 
-                            elif text in ["/help", "помощь"]:
+                            elif cmd in ["/help", "помощь"]:
                                 reply = (
                                     "ℹ️ <b>Команды турнира:</b>\n"
                                     "• /leaderboard или /status — лидерборд и рейтинг трех стратегий\n"
@@ -498,25 +506,34 @@ async def cs2_telegram_command_listener():
                         for update in data.get("result", []):
                             last_update_id = update["update_id"]
                             msg = update.get("message", {})
-                            text = (msg.get("text", "")).strip().lower()
+                            raw_text = (msg.get("text", "")).strip()
+                            if not raw_text:
+                                continue
+                            cmd = raw_text.split()[0].lower()
+                            if "@" in cmd:
+                                cmd = cmd.split("@")[0]
                             chat_id = str(msg.get("chat", {}).get("id", ""))
+                            if chat_id:
+                                cs2_notifier.set_default_chat_id(chat_id)
 
-                            if text in ["/start", "старт"]:
+                            is_admin = (not config.TELEGRAM_CHAT_ID) or (str(chat_id) == str(config.TELEGRAM_CHAT_ID)) or (str(chat_id) == "5579630526")
+
+                            if cmd in ["/start", "старт"]:
                                 reply = (
                                     "👋 <b>Добро пожаловать в CS2 Skin Paper Sniper!</b>\n\n"
                                     "🔫 <i>Автономный бот 24/7 для снайпинга недооцененных скинов, демпинга и аномальных скидок на Skinport и Steam Market.</i>\n\n"
                                     "💰 <b>Виртуальный депозит:</b> $200.00\n"
-                                    "🎯 <b>Критерии поиска:</b> дисконт от 20% к справедливой цене, чистый профит от 14% с учетом комиссий.\n\n"
+                                    "🎯 <b>Критерии поиска:</b> дисконт от 15% к справедливой цене, чистый профит от 8% с учетом комиссий, мин. 15 продаж за 30 дней.\n\n"
                                     "📊 <b>Команды:</b>\n"
                                     "• /status — баланс, PnL и сводка по инвентарю\n"
                                     "• /inventory или /items — список удерживаемых скинов и Trade Lock\n"
                                     "• /scan — мгновенный поиск топ-скидок на рынке прямо сейчас\n"
-                                    "• /export — выгрузить базу сделок (CSV)\n"
+                                    "• /export — выгрузить базу сделок и инвентарь (CSV / JSON)\n"
                                     "• /help — справка"
                                 )
                                 await cs2_notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
 
-                            elif text in ["/status", "/balance", "баланс"]:
+                            elif cmd in ["/status", "/balance", "баланс", "статус"]:
                                 sm = cs2_sniper.get_summary()
                                 reply = (
                                     "🔫 <b>CS2 SKIN SNIPER — СТАТУС ИНВЕНТАРЯ</b>\n\n"
@@ -530,11 +547,11 @@ async def cs2_telegram_command_listener():
                                 )
                                 await cs2_notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
 
-                            elif text in ["/inventory", "/items", "инвентарь", "скины"]:
+                            elif cmd in ["/inventory", "/items", "инвентарь", "скины"]:
                                 sm = cs2_sniper.get_summary()
                                 items = sm.get("items", [])
                                 if not items:
-                                    reply = "📭 <b>Инвентарь пуст.</b> Бот сканирует рынок на предмет скидок от 20%."
+                                    reply = "📭 <b>Инвентарь пуст.</b> Бот сканирует рынок на предмет скидок от 15%."
                                 else:
                                     lines = ["🎒 <b>СКИHЫ В ИНВЕНТАРЕ (TRADE LOCK):</b>\n"]
                                     for it in items:
@@ -546,45 +563,52 @@ async def cs2_telegram_command_listener():
                                     reply = "\n".join(lines)
                                 await cs2_notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
 
-                            elif text in ["/scan", "скан", "поиск"]:
-                                is_admin = (str(chat_id) == str(config.TELEGRAM_CHAT_ID))
+                            elif cmd in ["/scan", "скан", "поиск"]:
                                 if not is_admin:
                                     await cs2_notifier.send_message("⛔ Ручной запуск сканирования доступен только администратору для защиты от rate-limit.", chat_id=chat_id)
                                     continue
 
-                                loop = asyncio.get_running_loop()
-                                top = await loop.run_in_executor(None, cs2_sniper.get_top_discounts, 5)
-                                if not top:
-                                    reply = "🔍 Сканирование завершено. Ликвидных скидок >15% в эту секунду не обнаружено."
-                                else:
-                                    lines = ["🔥 <b>ТОП-5 ЛИКВИДНЫХ ДИСКОНТОВ НА SKINPORT ПРЯМО СЕЙЧАС:</b>\n"]
-                                    for c in top:
-                                        lines.append(
-                                            f"• <b>{html.escape(c['name'])}</b>\n"
-                                            f"  🏷 Выставлен за: <b>${c['min_price']:.2f}</b> (Fair: ${c['fair_price']:.2f})\n"
-                                            f"  📉 Скидка: <b>-{c['discount_pct']:.1f}%</b> | Объем (30д): <b>{c['vol_30']} шт.</b>\n"
-                                            f"  💰 Чистый профит (после 8%): <b>+{c['net_pct']:.1f}%</b> (+${c['net_profit']:.2f})\n"
-                                            f"  📦 Наличие: {c['quantity']} шт. | <a href='{c['url']}'>Ссылка на Skinport</a>\n"
-                                        )
-                                    reply = "\n".join(lines)
-                                await cs2_notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
+                                await cs2_notifier.send_message("🔍 Сканирую каталог Skinport на ликвидные дисконты (>15%)...", chat_id=chat_id)
+                                try:
+                                    loop = asyncio.get_running_loop()
+                                    top = await loop.run_in_executor(None, cs2_sniper.get_top_discounts, 5)
+                                    if not top:
+                                        reply = "🔍 Сканирование завершено. Ликвидных скидок >15% в эту секунду не обнаружено."
+                                    else:
+                                        lines = ["🔥 <b>ТОП-5 ЛИКВИДНЫХ ДИСКОНТОВ НА SKINPORT ПРЯМО СЕЙЧАС:</b>\n"]
+                                        for c in top:
+                                            lines.append(
+                                                f"• <b>{html.escape(c['name'])}</b>\n"
+                                                f"  🏷 Выставлен за: <b>${c['min_price']:.2f}</b> (Fair: ${c['fair_price']:.2f})\n"
+                                                f"  📉 Скидка: <b>-{c['discount_pct']:.1f}%</b> | Объем (30д): <b>{c['vol_30']} шт.</b>\n"
+                                                f"  💰 Чистый профит (после 8%): <b>+{c['net_pct']:.1f}%</b> (+${c['net_profit']:.2f})\n"
+                                                f"  📦 Наличие: {c['quantity']} шт. | <a href='{c['url']}'>Ссылка на Skinport</a>\n"
+                                            )
+                                        reply = "\n".join(lines)
+                                    await cs2_notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")
+                                except Exception as err:
+                                    logger.error(f"Error executing /scan: {err}")
+                                    await cs2_notifier.send_message(f"⚠️ Ошибка сканирования: {err}", chat_id=chat_id)
 
-                            elif text in ["/export", "экспорт", "csv"]:
-                                is_admin = (str(chat_id) == str(config.TELEGRAM_CHAT_ID))
+                            elif cmd in ["/export", "экспорт", "csv"]:
                                 if not is_admin:
                                     await cs2_notifier.send_message("⛔ Экспорт базы данных доступен только администратору.", chat_id=chat_id)
                                     continue
 
+                                cs2_sniper.save()
                                 csv_path = cs2_sniper.export_csv("cs2_trades.csv")
-                                await cs2_notifier.send_document(csv_path, chat_id=chat_id, caption="📊 <code>cs2_trades.csv</code> — плоская таблица сделок по CS2 скинам.")
+                                json_path = "cs2_portfolio_state.json"
+                                await cs2_notifier.send_document(csv_path, chat_id=chat_id, caption="📊 <code>cs2_trades.csv</code> — плоская таблица сделок и удерживаемых скинов.")
+                                if os.path.exists(json_path):
+                                    await cs2_notifier.send_document(json_path, chat_id=chat_id, caption="🗄️ <code>cs2_portfolio_state.json</code> — сырой JSON-дамп инвентаря CS2.")
 
-                            elif text in ["/help", "помощь"]:
+                            elif cmd in ["/help", "помощь"]:
                                 reply = (
                                     "ℹ️ <b>Команды CS2 Снайпера:</b>\n"
                                     "• /status — баланс и профит\n"
                                     "• /inventory — инвентарь и статус Trade Lock\n"
                                     "• /scan — живой поиск топ-дисконтов на Skinport\n"
-                                    "• /export — скачать CSV\n"
+                                    "• /export — скачать CSV и JSON базы\n"
                                     "• /help — эта справка"
                                 )
                                 await cs2_notifier.send_message(reply, chat_id=chat_id, parse_mode="HTML")

@@ -306,12 +306,14 @@ class CS2SkinSniper:
         }
 
     def export_csv(self, filename: str = "cs2_trades.csv") -> str:
+        now_ts = time.time()
         with open(filename, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow([
                 "Timestamp", "Action", "Item_Name", "Buy_Price",
                 "Fair_or_Sell_Price", "Discount_Percent", "Vol_30d", "Profit_USD", "Profit_Percent", "Reason"
             ])
+            # 1. Closed and executed history
             for h in self.history:
                 writer.writerow([
                     h.get("time", ""),
@@ -324,6 +326,25 @@ class CS2SkinSniper:
                     h.get("profit", ""),
                     f"{h.get('profit_pct', '')}%" if h.get("profit_pct") else "",
                     h.get("reason", "")
+                ])
+
+            # 2. Currently held inventory (locked or awaiting unlock)
+            for tid, item in self.inventory.items():
+                days_left = max(0, int((item.get("trade_lock_until", now_ts) - now_ts) / 86400) + 1)
+                net_sale = item["fair_price"] * (1.0 - config.CS2_FEE_PCT)
+                unrealized_profit = round(net_sale - item["buy_price"], 2)
+                unrealized_pct = round((unrealized_profit / item["buy_price"]) * 100, 1)
+                writer.writerow([
+                    item.get("bought_at", ""),
+                    "HOLD_TRADE_LOCK",
+                    item.get("name", ""),
+                    item.get("buy_price", ""),
+                    item.get("fair_price", ""),
+                    f"{item.get('discount_pct', '')}%",
+                    item.get("vol_30", ""),
+                    f"+${unrealized_profit:.2f}" if unrealized_profit >= 0 else f"-${abs(unrealized_profit):.2f}",
+                    f"{unrealized_pct:+}%",
+                    f"Trade Lock активен (осталось ~{days_left} дн.)"
                 ])
         return filename
 
