@@ -176,26 +176,53 @@ class CS2SkinSniper:
         new_snipes = []
         sold_items = []
 
-        # 1. Check Trade Lock expirations on held inventory (Simulate Auto-Sell at Fair Price)
-        for trade_id, item in list(self.inventory.items()):
-            lock_until = item.get("trade_lock_until", now_ts)
-            if now_ts >= lock_until:
-                gross_sale = item["fair_price"]
+        # 1. Check Trade Lock expirations on held inventory (Dynamic Market Price Sale)
+        expired_ids = [tid for tid, it in self.inventory.items() if now_ts >= it.get("trade_lock_until", now_ts)]
+        if expired_ids:
+            fresh_hist = self.fetch_skinport_sales_history()
+            fresh_cat = {c.get("market_hash_name"): c for c in self.fetch_skinport_catalog()}
+
+            for trade_id in expired_ids:
+                item = self.inventory[trade_id]
+                name = item["name"]
+                old_fair = item.get("fair_price", item["buy_price"])
+
+                # Fresh price resolution from Skinport API
+                h = fresh_hist.get(name, {})
+                c = fresh_cat.get(name, {})
+                avg_30 = h.get("last_30_days", {}).get("avg")
+                sug_p = c.get("suggested_price") or h.get("suggested_price")
+
+                if avg_30 and sug_p:
+                    fresh_market_price = min(avg_30, sug_p)
+                elif avg_30:
+                    fresh_market_price = avg_30
+                elif sug_p:
+                    fresh_market_price = sug_p
+                else:
+                    fresh_market_price = old_fair
+
+                # Conservative liquidity execution: 1.5% discount off fair market price to guarantee instant fill
+                gross_sale = round(fresh_market_price * 0.985, 2)
                 net_sale = round(gross_sale * (1.0 - config.CS2_FEE_PCT), 2)
                 profit = round(net_sale - item["buy_price"], 2)
                 profit_pct = round((profit / item["buy_price"]) * 100, 2)
+                drift_pct = round((fresh_market_price - old_fair) / old_fair * 100, 1) if old_fair > 0 else 0.0
 
-                self.cash += net_sale
+                self.cash = round(self.cash + net_sale, 2)
                 sale_record = {
                     "action": "SELL",
                     "trade_id": trade_id,
-                    "name": item["name"],
+                    "name": name,
                     "buy_price": item["buy_price"],
                     "sell_price": gross_sale,
                     "net_sale": net_sale,
                     "profit": profit,
                     "profit_pct": profit_pct,
-                    "reason": "Trade Lock завершен: продажа по Fair Price",
+                    "initial_fair": old_fair,
+                    "actual_market": round(fresh_market_price, 2),
+                    "price_drift_pct": drift_pct,
+                    "reason": f"Trade Lock снят: продажа по рынку (дрифт {drift_pct:+.1f}%)",
                     "time": time.strftime("%Y-%m-%d %H:%M:%S")
                 }
                 self.history.append(sale_record)
@@ -311,7 +338,7 @@ class CS2SkinSniper:
             writer = csv.writer(f)
             writer.writerow([
                 "Timestamp", "Action", "Item_Name", "Buy_Price",
-                "Fair_or_Sell_Price", "Discount_Percent", "Vol_30d", "Profit_USD", "Profit_Percent", "Reason"
+                "Fair_or_Sell_Price", "Initial_Fair_Price", "Price_Drift_Percent", "Discount_Percent", "Vol_30d", "Profit_USD", "Profit_Percent", "Reason"
             ])
             # 1. Closed and executed history
             for h in self.history:
@@ -321,6 +348,8 @@ class CS2SkinSniper:
                     h.get("name", ""),
                     h.get("buy_price", ""),
                     h.get("sell_price", h.get("fair_price", "")),
+                    h.get("initial_fair", h.get("fair_price", "")),
+                    f"{h.get('price_drift_pct', 0.0):+.1f}%" if "price_drift_pct" in h else "",
                     f"{h.get('discount_pct', '')}%" if h.get("discount_pct") else "",
                     h.get("vol_30", ""),
                     h.get("profit", ""),
@@ -340,6 +369,8 @@ class CS2SkinSniper:
                     item.get("name", ""),
                     item.get("buy_price", ""),
                     item.get("fair_price", ""),
+                    item.get("fair_price", ""),
+                    "+0.0%",
                     f"{item.get('discount_pct', '')}%",
                     item.get("vol_30", ""),
                     f"+${unrealized_profit:.2f}" if unrealized_profit >= 0 else f"-${abs(unrealized_profit):.2f}",

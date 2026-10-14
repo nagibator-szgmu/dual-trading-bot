@@ -91,8 +91,8 @@ class StrategyPortfolio:
             entry = pos.get("entry", current_price)
             side = pos.get("side", "BUY")
             cur_pct = (current_price - entry) / entry * 100 if side == "BUY" else (entry - current_price) / entry * 100
-            pos["max_unrealized_pnl_percent"] = max(pos.get("max_unrealized_pnl_percent", 0.0), cur_pct)
-            pos["min_unrealized_pnl_percent"] = min(pos.get("min_unrealized_pnl_percent", 0.0), cur_pct)
+            pos["max_unrealized_pnl_percent"] = round(max(float(pos.get("max_unrealized_pnl_percent", 0.0)), cur_pct), 2)
+            pos["min_unrealized_pnl_percent"] = round(min(float(pos.get("min_unrealized_pnl_percent", 0.0)), cur_pct), 2)
             pos["bars_held"] = max(1, int((now_ts - pos.get("opened_at_ts", now_ts)) / 900))
 
     def open_position(
@@ -552,6 +552,8 @@ class TournamentManager:
                     row["position_size_usd"] = pos.get("amount", "")
                     row["realized_pnl_usd"] = 0.0
                     row["realized_pnl_percent"] = 0.0
+                    row["max_unrealized_pnl_percent"] = round(float(pos.get("max_unrealized_pnl_percent", 0.0)), 2)
+                    row["min_unrealized_pnl_percent"] = round(float(pos.get("min_unrealized_pnl_percent", 0.0)), 2)
                     row["entry_reason"] = pos.get("entry_reason", pos.get("strategy", ""))
                     row["exit_reason"] = "POSITION_OPEN"
                     row["exit_type"] = "OPEN"

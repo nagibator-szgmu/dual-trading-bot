@@ -475,11 +475,14 @@ async def cs2_sniper_loop():
                 await cs2_notifier.send_message(msg, parse_mode="HTML")
 
             for s in res.get("sold", []):
+                p_sign = "+" if s.get('profit', 0) >= 0 else ""
+                p_pct_sign = "+" if s.get('profit_pct', 0) >= 0 else ""
+                drift_str = f"\n📊 <b>Дрифт цены рынка за 7д:</b> <code>{s.get('price_drift_pct', 0.0):+.1f}%</code>" if s.get('price_drift_pct') is not None else ""
                 msg = (
                     f"💰 <b>[CS2 СНАЙПЕР — ПРОДАН ПРЕДМЕТ]</b>\n\n"
                     f"🔫 <b>Предмет:</b> <code>{html.escape(s['name'])}</code>\n"
-                    f"💵 <b>Вход:</b> <code>${s['buy_price']:.2f}</code> ➔ <b>Продано:</b> <code>${s['net_sale']:.2f}</code>\n"
-                    f"📈 <b>Чистая прибыль:</b> <code>+{s['profit']:.2f}$</code> (<code>+{s['profit_pct']:+.1f}%</code>)\n"
+                    f"💵 <b>Вход:</b> <code>${s['buy_price']:.2f}</code> ➔ <b>Выручка:</b> <code>${s['net_sale']:.2f}</code> (витрина: ${s['sell_price']:.2f})\n"
+                    f"📈 <b>Чистая прибыль:</b> <code>{p_sign}{s['profit']:.2f}$</code> (<code>{p_pct_sign}{s['profit_pct']:.1f}%</code>){drift_str}\n"
                     f"💼 <b>Баланс CS2 банка:</b> <code>${cs2_sniper.cash:.2f}</code>"
                 )
                 await cs2_notifier.send_message(msg, parse_mode="HTML")

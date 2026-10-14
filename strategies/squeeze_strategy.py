@@ -49,11 +49,11 @@ class VolatilitySqueezeStrategy:
         # Squeeze Condition: Bollinger Bands inside Keltner Channels
         is_squeezed = (lower_bb > keltner_lower) and (upper_bb < keltner_upper)
         
-        # Volume Spike (Volume > 1.3 * SMA Volume 20)
+        # Volume Spike (Volume > 1.6 * SMA Volume 20)
         vols = [c.get("vol", 1.0) for c in candles[-20:]]
         avg_vol = sum(vols) / len(vols)
         curr_vol = candles[-1].get("vol", 1.0)
-        vol_confirmed = curr_vol >= 1.25 * avg_vol
+        vol_confirmed = curr_vol >= 1.60 * avg_vol
 
         return {
             "sma20": sma20,
@@ -147,11 +147,13 @@ class VolatilitySqueezeStrategy:
             return
 
         closed_bars = candles[:-1]
+        last_closed = closed_bars[-1]
         highest_prev = max(c["high"] for c in closed_bars[-20:])
-        confirmed_close = closed_bars[-1]["close"]
+        confirmed_close = last_closed["close"]
+        bullish_candle = last_closed.get("close", 0) > last_closed.get("open", 0)
 
-        # Validated Squeeze Breakout: volatility was squeezed or volume confirmed breakout above BB
-        if (ind["is_squeezed"] or ind["vol_confirmed"]) and confirmed_close > highest_prev * 0.999 and current_price > ind["upper_bb"]:
+        # Validated Squeeze Breakout: volatility was squeezed AND confirmed by volume spike (>=1.6x) AND bullish candle
+        if ind["is_squeezed"] and ind["vol_confirmed"] and bullish_candle and confirmed_close > highest_prev * 0.999 and current_price > ind["upper_bb"]:
             sl = self.round_price(current_price * (1.0 - self.stop_loss_pct))
             tp = self.round_price(current_price * (1.0 + self.take_profit_pct))
             

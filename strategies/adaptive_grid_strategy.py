@@ -31,8 +31,8 @@ class AdaptiveGridStrategy:
 
         atr14 = self.calculate_atr(candles, period=14)
         atr_pct = (atr14 / current_price) if current_price > 0 else 0.02
-        # Dynamic step: calibrated to max(2.0%, 2.1 * ATR/Price) to survive trending sell-offs
-        dynamic_step = max(0.020, min(0.048, 2.1 * atr_pct))
+        # Dynamic step: calibrated to max(2.4%, 2.1 * ATR/Price) to survive trending sell-offs
+        dynamic_step = max(0.024, min(0.048, 2.1 * atr_pct))
 
         # 1. Check existing positions for dynamic TP
         to_close = []

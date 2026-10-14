@@ -151,9 +151,9 @@ class MeanReversionStrategy:
 
         # 3. Entry conditions: RSI <= 30, Close <= Lower_BB * 0.997 and Volume Confirmation
         if rsi <= 30.0 and current_price <= lower_bb * 0.997 and vol_ok:
-            sl = self.round_price(current_price * (1.0 - self.stop_loss_pct))
-            # Guaranteed TP >= +2.0%, or return to SMA + 0.3%
-            tp = self.round_price(max(sma * 1.003, current_price * 1.020))
+            # Guaranteed TP >= +2.0% (or +2.3% on extreme oversold RSI < 18.0), or return to SMA + 0.3%
+            min_tp_pct = 0.023 if rsi < 18.0 else 0.020
+            tp = self.round_price(max(sma * 1.003, current_price * (1.0 + min_tp_pct)))
             inds = {
                 "rsi_14": round(rsi, 2),
                 "atr_14": round(atr14, 4),
