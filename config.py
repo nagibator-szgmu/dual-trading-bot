@@ -9,10 +9,11 @@ class Config:
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
     TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "5579630526")
 
-    # Tournament Budgets: $100 for each independent strategy
-    TREND_BUDGET: float = 100.0
-    GRID_BUDGET: float = 100.0
-    REVERSION_BUDGET: float = 100.0
+    # Tournament Budgets: $200 for each of the top 4 independent strategies ($800 total)
+    STRATEGY_BUDGET: float = 200.0
+    TREND_BUDGET: float = 200.0
+    GRID_BUDGET: float = 200.0
+    REVERSION_BUDGET: float = 200.0
 
     SYMBOLS: list = ("BTC-USDT", "ETH-USDT", "SOL-USDT", "DOGE-USDT")
     TIMEFRAME: str = "15m"
@@ -32,5 +33,8 @@ class Config:
     CS2_MAX_AVG_HOURS_BETWEEN_SALES: float = 48.0  # turnover velocity: avg <= 48h between sales
     CS2_MIN_SALES_LAST_7D: int = 3      # active recent trading: at least 3 sales in last 7 days
     CS2_FEE_PCT: float = 0.08           # Skinport real standard seller fee (8%)
+    CS2_MAX_INVENTORY_ITEMS: int = 15   # Expanded from 6 to 15 slots (85% bank utilization)
+    CS2_MAX_BUYS_PER_SCAN: int = 2      # Max 2 purchases per scan to prevent cluster buying
 
 config = Config()
+

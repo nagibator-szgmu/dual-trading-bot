@@ -10,8 +10,8 @@ logger = logging.getLogger(__name__)
 class POCPullbackStrategy:
     def __init__(self, portfolio: StrategyPortfolio):
         self.portfolio = portfolio
-        self.name = "8. POC Pullback Sniper (Volume Profile)"
-        self.position_size = 15.0
+        self.name = "1. POC Pullback Sniper (Volume Profile)"
+        self.position_size = 45.0
         self.stop_loss_pct = 0.018    # base -1.8% SL
         self.cooldowns: dict = {}
 
@@ -188,7 +188,7 @@ class POCPullbackStrategy:
                     f"🎯 <b>[POC PULLBACK — ТЕСТ УРОВНЯ ОБЪЕМА]</b>\n"
                     f"🪙 <b>Пара:</b> <code>{symbol}</code> (ЛОНГ на отскок от POC)\n"
                     f"📊 <b>Point of Control (24h):</b> <code>{poc_fmt}</code>\n"
-                    f"💵 <b>Цена входа:</b> <code>{p_fmt}</code> | Объем: $15\n"
+                    f"💵 <b>Цена входа:</b> <code>{p_fmt}</code> | Объем: ${self.position_size:.0f}\n"
                     f"🎯 <b>Цель (+2.0 ATR):</b> <code>{tp_fmt}</code> | 🛡 <b>SL (под POC):</b> <code>{sl_fmt}</code>\n"
                     f"💰 <b>Банк стратегии:</b> <code>${self.portfolio.cash:.2f}</code>"
                 )

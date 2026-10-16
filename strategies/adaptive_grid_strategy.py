@@ -8,8 +8,8 @@ logger = logging.getLogger(__name__)
 class AdaptiveGridStrategy:
     def __init__(self, portfolio: StrategyPortfolio):
         self.portfolio = portfolio
-        self.name = "5. Адаптивная Сетка (ATR)"
-        self.level_size = 10.0
+        self.name = "3. Адаптивная Сетка (ATR)"
+        self.level_size = 25.0
         self.max_levels_per_symbol = 3
         self.last_grid_action_price: Dict[str, float] = {}
 
@@ -31,8 +31,9 @@ class AdaptiveGridStrategy:
 
         atr14 = self.calculate_atr(candles, period=14)
         atr_pct = (atr14 / current_price) if current_price > 0 else 0.02
-        # Dynamic step: calibrated to max(2.4%, 2.1 * ATR/Price) to survive trending sell-offs
-        dynamic_step = max(0.024, min(0.048, 2.1 * atr_pct))
+        # Dynamic step: lowered to 1.2% in low-volatility consolidation (ATR < 0.35%), else 2.4% min
+        min_step = 0.012 if atr_pct < 0.0035 else 0.024
+        dynamic_step = max(min_step, min(0.048, 2.1 * atr_pct))
 
         # 1. Check existing positions for dynamic TP
         to_close = []
@@ -117,7 +118,7 @@ class AdaptiveGridStrategy:
                     f"🕸️ <b>[АДАПТИВНАЯ СЕТКА — НОВЫЙ УРОВЕНЬ]</b>\n"
                     f"🪙 <b>Пара:</b> <code>{symbol}</code>\n"
                     f"📐 <b>Динамический шаг (ATR):</b> <code>{dynamic_step*100:.2f}%</code>\n"
-                    f"💵 <b>Цена входа:</b> <code>${current_price:.2f}</code> | Объем: $10\n"
+                    f"💵 <b>Цена входа:</b> <code>${current_price:.2f}</code> | Объем: ${self.level_size:.0f}\n"
                     f"🎯 <b>Цель продажи:</b> <code>${current_price * (1.0 + dynamic_step):.2f}</code>\n"
                     f"💰 <b>Свободный кэш:</b> <code>${self.portfolio.cash:.2f}</code>"
                 )

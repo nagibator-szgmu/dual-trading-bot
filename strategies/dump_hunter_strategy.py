@@ -10,8 +10,8 @@ logger = logging.getLogger(__name__)
 class FlashDumpHunterStrategy:
     def __init__(self, portfolio: StrategyPortfolio):
         self.portfolio = portfolio
-        self.name = "6. Охотник за сквизами (Dump)"
-        self.position_size = 15.0
+        self.name = "2. Охотник за сквизами (Dump Hunter)"
+        self.position_size = 45.0
         self.stop_loss_pct = 0.020    # -2.0% SL
         self.take_profit_pct = 0.028   # +2.8% TP
         self.cooldowns: dict = {}
@@ -174,7 +174,7 @@ class FlashDumpHunterStrategy:
                     f"🩸 <b>[ОХОТНИК ЗА СКВИЗАМИ — ВЫКУП ПРОЛИВА]</b>\n"
                     f"🪙 <b>Пара:</b> <code>{symbol}</code> (ЛОНГ на отскок)\n"
                     f"📉 <b>Пролив:</b> Импульсный слив на <code>{drop_pct*100:.1f}%</code> с выкупом фитиля ≥50%\n"
-                    f"💵 <b>Цена входа:</b> <code>{p_fmt}</code> | Объем: $15\n"
+                    f"💵 <b>Цена входа:</b> <code>{p_fmt}</code> | Объем: ${self.position_size:.0f}\n"
                     f"🎯 <b>Цель V-отскока:</b> <code>{tp_fmt}</code> (+{tp_target_pct*100:.1f}%) | 🛡 <b>SL:</b> <code>{sl_fmt}</code> (-2.0%)\n"
                     f"💰 <b>Банк стратегии:</b> <code>${self.portfolio.cash:.2f}</code>"
                 )

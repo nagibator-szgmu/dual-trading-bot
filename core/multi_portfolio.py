@@ -3,6 +3,7 @@ import json
 import os
 import time
 from typing import Dict, List, Any, Optional
+from core.hf_sync import sync_from_hf, sync_to_hf
 
 PORTFOLIO_FILE = "portfolio_state.json"
 SNAPSHOTS_FILE = "snapshots.csv"
@@ -347,27 +348,43 @@ class StrategyPortfolio:
 
 
 class TournamentManager:
-    def __init__(self, initial_budget: float = 100.0):
-        self.strat_trend = StrategyPortfolio("1. Long-Only Пробой (EMA50)", "trend", initial_budget)
-        self.strat_grid = StrategyPortfolio("2. Спотовая Сетка (Trend Grid)", "grid", initial_budget)
-        self.strat_reversion = StrategyPortfolio("3. Возврат к средней (RSI)", "reversion", initial_budget)
-        self.strat_squeeze = StrategyPortfolio("4. Квантовая Пружина (Squeeze)", "squeeze", initial_budget)
-        self.strat_adaptive_grid = StrategyPortfolio("5. Адаптивная Сетка (ATR)", "adaptive_grid", initial_budget)
-        self.strat_dump_hunter = StrategyPortfolio("6. Охотник за сквизами (Dump)", "dump_hunter", initial_budget)
-        self.strat_cascade = StrategyPortfolio("7. HyperCascade Sniper (Пирамидинг)", "cascade", initial_budget)
-        self.strat_poc = StrategyPortfolio("8. POC Pullback (Volume Profile)", "poc_pullback", initial_budget)
+    def __init__(self, initial_budget: float = 200.0, **kwargs):
+        # 4 Core Active Strategies ($200.00 each = $800.00 total bankroll)
+        self.strat_poc = StrategyPortfolio("1. POC Pullback Sniper (Volume Profile)", "poc_pullback", initial_budget)
+        self.strat_dump_hunter = StrategyPortfolio("2. Охотник за сквизами (Dump Hunter)", "dump_hunter", initial_budget)
+        self.strat_adaptive_grid = StrategyPortfolio("3. Адаптивная Сетка (ATR Grid)", "adaptive_grid", initial_budget)
+        self.strat_squeeze = StrategyPortfolio("4. Квантовая Пружина (Volatility Squeeze)", "squeeze", initial_budget)
+
         self.strategies = [
-            self.strat_trend,
-            self.strat_grid,
-            self.strat_reversion,
-            self.strat_squeeze,
-            self.strat_adaptive_grid,
+            self.strat_poc,
             self.strat_dump_hunter,
-            self.strat_cascade,
-            self.strat_poc
+            self.strat_adaptive_grid,
+            self.strat_squeeze
         ]
+
+        # Archived/Deactivated strategies retained for historical metrics & zero data loss
+        self.archived_strategies = [
+            StrategyPortfolio("5. Long-Only Пробой (EMA50) [Архив]", "trend", 100.0),
+            StrategyPortfolio("6. Спотовая Сетка (Trend Grid) [Архив]", "grid", 100.0),
+            StrategyPortfolio("7. Возврат к средней (RSI) [Архив]", "reversion", 100.0),
+            StrategyPortfolio("8. HyperCascade Sniper [Архив]", "cascade", 100.0)
+        ]
+
+        # Convenience backward compatibility references
+        self.strat_trend = self.archived_strategies[0]
+        self.strat_grid = self.archived_strategies[1]
+        self.strat_reversion = self.archived_strategies[2]
+        self.strat_cascade = self.archived_strategies[3]
+
         self.total_initial = len(self.strategies) * initial_budget
         self.peak_equity: Dict[str, float] = {s.code: initial_budget for s in self.strategies}
+
+        # Auto-restore state from HF Dataset if local is empty/reset
+        try:
+            sync_from_hf(filenames=[PORTFOLIO_FILE, SNAPSHOTS_FILE, SIGNALS_FILE])
+        except Exception:
+            pass
+
         self.load()
 
     def load(self):
@@ -375,15 +392,23 @@ class TournamentManager:
             try:
                 with open(PORTFOLIO_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    for s in self.strategies:
+                    all_strats = self.strategies + self.archived_strategies
+                    for s in all_strats:
                         if s.code in data:
                             s.from_dict(data[s.code])
+                    # Rebalance budget to $200 for active 4 strategies if loaded from older $100 preset
+                    for s in self.strategies:
+                        if s.initial < 200.0:
+                            diff = 200.0 - s.initial
+                            s.initial = 200.0
+                            s.cash = round(s.cash + diff, 2)
             except Exception:
                 pass
 
     def save(self):
         temp_file = f"{PORTFOLIO_FILE}.tmp"
-        data = {s.code: s.to_dict() for s in self.strategies}
+        all_strats = self.strategies + self.archived_strategies
+        data = {s.code: s.to_dict() for s in all_strats}
         try:
             with open(temp_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
@@ -391,6 +416,11 @@ class TournamentManager:
         except Exception:
             with open(PORTFOLIO_FILE, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
+
+        try:
+            sync_to_hf(PORTFOLIO_FILE)
+        except Exception:
+            pass
 
     def record_snapshot(self, live_prices: Optional[Dict[str, float]] = None):
         live_prices = live_prices or {}
@@ -431,6 +461,7 @@ class TournamentManager:
                     writer.writeheader()
                 for r in snapshot_records:
                     writer.writerow(r)
+            sync_to_hf(SNAPSHOTS_FILE)
         except Exception:
             pass
 

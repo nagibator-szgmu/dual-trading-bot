@@ -7,6 +7,7 @@ import time
 from typing import Dict, List, Any, Optional
 import urllib.request
 from config import config
+from core.hf_sync import sync_from_hf, sync_to_hf
 
 logger = logging.getLogger(__name__)
 CS2_STATE_FILE = "cs2_portfolio_state.json"
@@ -17,13 +18,20 @@ class CS2SkinSniper:
         self.cash = initial_budget
         self.inventory: Dict[str, Any] = {}
         self.history: List[Dict[str, Any]] = []
-        self.max_inventory_items = 6
+        self.max_inventory_items = getattr(config, "CS2_MAX_INVENTORY_ITEMS", 15)
+        self.max_buys_per_scan = getattr(config, "CS2_MAX_BUYS_PER_SCAN", 2)
 
         # In-memory caching to avoid Skinport HTTP 429 rate limit
         self._catalog_cache: List[Dict[str, Any]] = []
         self._last_catalog_ts: float = 0.0
         self._history_cache: Dict[str, Dict[str, Any]] = {}
         self._last_history_ts: float = 0.0
+
+        # Auto-restore state from Hugging Face Dataset if local is empty/reset
+        try:
+            sync_from_hf(filenames=[CS2_STATE_FILE])
+        except Exception as e:
+            logger.warning(f"HF sync on startup skipped: {e}")
 
         self.load()
 
@@ -54,6 +62,13 @@ class CS2SkinSniper:
         except Exception:
             with open(CS2_STATE_FILE, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
+
+        # Persist state to Hugging Face Dataset
+        try:
+            sync_to_hf(CS2_STATE_FILE)
+        except Exception as e:
+            logger.warning(f"Error notifying HF sync for CS2 state: {e}")
+
 
     def _decompress_brotli(self, raw_bytes: bytes) -> bytes:
         try:
@@ -238,9 +253,10 @@ class CS2SkinSniper:
         # 3. Fetch live catalog + sales history to find best verified discount candidates
         candidates = self.get_top_discounts(limit=25)
         existing_names = {item["name"] for item in self.inventory.values()}
+        buys_in_scan = 0
 
         for cand in candidates:
-            if len(self.inventory) >= self.max_inventory_items:
+            if len(self.inventory) >= self.max_inventory_items or buys_in_scan >= self.max_buys_per_scan:
                 break
 
             name = cand["name"]
@@ -252,7 +268,7 @@ class CS2SkinSniper:
                 continue
 
             # Execute Paper Buy
-            self.cash -= buy_price
+            self.cash = round(self.cash - buy_price, 2)
             trade_id = f"cs2_{abs(hash(name)) % 1000000}_{int(now_ts)}"
             lock_until = now_ts + (7 * 86400)
 
@@ -275,6 +291,7 @@ class CS2SkinSniper:
             }
             self.inventory[trade_id] = snipe_entry
             existing_names.add(name)
+            buys_in_scan += 1
 
             self.history.append({
                 "action": "BUY",
@@ -288,7 +305,15 @@ class CS2SkinSniper:
             })
             new_snipes.append(snipe_entry)
 
-        self.save()
+        if new_snipes or sold_items:
+            self.save()
+            try:
+                sync_to_hf(CS2_STATE_FILE, immediate=True)
+            except Exception as e:
+                logger.warning(f"Error immediate syncing CS2 state: {e}")
+        else:
+            self.save()
+
         return {"sniped": new_snipes, "sold": sold_items}
 
     def get_summary(self) -> Dict[str, Any]:

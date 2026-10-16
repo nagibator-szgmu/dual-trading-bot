@@ -10,8 +10,8 @@ logger = logging.getLogger(__name__)
 class VolatilitySqueezeStrategy:
     def __init__(self, portfolio: StrategyPortfolio):
         self.portfolio = portfolio
-        self.name = "4. Квантовая Пружина (Squeeze)"
-        self.position_size = 15.0
+        self.name = "4. Квантовая Пружина (Volatility Squeeze)"
+        self.position_size = 45.0
         self.stop_loss_pct = 0.018    # -1.8% SL
         self.take_profit_pct = 0.055   # +5.5% TP (R:R 1:3)
         self.cooldowns: dict = {}
@@ -181,7 +181,7 @@ class VolatilitySqueezeStrategy:
                     f"💥 <b>[КВАНТОВАЯ ПРУЖИНА — ВЫХОД ИЗ СЖАТИЯ]</b>\n"
                     f"🪙 <b>Пара:</b> <code>{symbol}</code> (ЛОНГ)\n"
                     f"⚡ <b>Паттерн:</b> Разжатие полос Боллинджера / Пробой канала\n"
-                    f"💵 <b>Вход:</b> <code>{p_fmt}</code>\n"
+                    f"💵 <b>Вход:</b> <code>{p_fmt}</code> | Объем: ${self.position_size:.0f}\n"
                     f"🎯 <b>Тейк-профит:</b> <code>{tp_fmt}</code> (+5.5%) | 🛡 <b>SL:</b> <code>{sl_fmt}</code> (-1.8%)\n"
                     f"💰 <b>Банк стратегии:</b> <code>${self.portfolio.cash:.2f}</code>"
                 )
